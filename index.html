@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>AI Meeting Recorder | Firmware Installer</title>
+
+<meta name="description"
+      content="Firmware installer for AI Meeting Recorder powered by XIAO ESP32-S3 Sense">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet">
+
+<script type="module"
+        src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module">
+</script>
+
+<style>
+
+:root{
+
+    --bg:#0b1220;
+    --card:#111827;
+    --card-border:#1f2937;
+
+    --text:#f8fafc;
+    --muted:#94a3b8;
+
+    --primary:#2563eb;
+    --primary2:#3b82f6;
+
+    --warning:#f59e0b;
+
+    --radius:18px;
+}
+
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+}
+
+html{
+    scroll-behavior:smooth;
+}
+
+body{
+
+    font-family:'Inter',sans-serif;
+
+    background:var(--bg);
+
+    color:var(--text);
+
+    line-height:1.7;
+
+    -webkit-font-smoothing:antialiased;
+}
+
+.container{
+
+    width:100%;
+    max-width:1100px;
+
+    margin:auto;
+
+    padding:24px;
+}
+
+/* ---------------- HERO ---------------- */
+
+.hero{
+
+    padding:80px 20px 60px;
+
+    text-align:center;
+}
+
+.badge{
+
+    display:inline-flex;
+
+    align-items:center;
+
+    gap:8px;
+
+    padding:8px 14px;
+
+    border-radius:999px;
+
+    background:#111827;
+
+    border:1px solid #1f2937;
+
+    color:#cbd5e1;
+
+    font-size:14px;
+
+    margin-bottom:20px;
+}
+
+.hero h1{
+
+    font-size:clamp(2.2rem,5vw,4rem);
+
+    line-height:1.1;
+
+    margin-bottom:18px;
+}
+
+.hero p{
+
+    color:var(--muted);
+
+    max-width:700px;
+
+    margin:auto;
+
+    font-size:1.05rem;
+}
+
+/* ---------------- GRID ---------------- */
+
+.grid{
+
+    display:grid;
+
+    grid-template-columns:repeat(auto-fit,minmax(300px,1fr));
+
+    gap:24px;
+
+    margin-bottom:24px;
+}
+
+/* ---------------- CARD ---------------- */
+
+.card{
+
+    background:var(--card);
+
+    border:1px solid var(--card-border);
+
+    border-radius:var(--radius);
+
+    padding:24px;
+}
+
+.card h2{
+
+    font-size:1.15rem;
+
+    margin-bottom:14px;
+}
+
+.card p{
+
+    color:var(--muted);
+}
+
+.card ul{
+
+    padding-left:20px;
+}
+
+.card li{
+
+    margin-bottom:8px;
+}
+
+/* ---------------- INSTALL SECTION ---------------- */
+
+.install-card{
+
+    text-align:center;
+
+    margin:30px 0;
+}
+
+.install-card h2{
+
+    margin-bottom:10px;
+}
+
+.install-card p{
+
+    color:var(--muted);
+
+    margin-bottom:24px;
+}
+
+/* -------- REAL ESP WEB TOOLS BUTTON -------- */
+
+esp-web-install-button::part(button){
+
+    border:none;
+
+    outline:none;
+
+    cursor:pointer;
+
+    padding:16px 34px;
+
+    border-radius:14px;
+
+    font-family:'Inter',sans-serif;
+
+    font-size:16px;
+
+    font-weight:700;
+
+    color:white;
+
+    background:
+        linear-gradient(
+            135deg,
+            var(--primary),
+            var(--primary2)
+        );
+
+    box-shadow:
+        0 6px 16px rgba(37,99,235,0.22);
+
+    transition:
+        transform .2s ease,
+        box-shadow .2s ease;
+}
+
+esp-web-install-button::part(button):hover{
+
+    transform:translateY(-2px);
+
+    box-shadow:
+        0 10px 24px rgba(37,99,235,0.28);
+}
+
+esp-web-install-button::part(button):active{
+
+    transform:translateY(0px);
+}
+
+/* ---------------- BUTTONS ---------------- */
+
+.link-btn{
+
+    display:inline-flex;
+
+    align-items:center;
+
+    justify-content:center;
+
+    margin-top:16px;
+
+    text-decoration:none;
+
+    color:white;
+
+    background:#1f2937;
+
+    border:1px solid #374151;
+
+    padding:12px 18px;
+
+    border-radius:12px;
+
+    transition:.2s;
+}
+
+.link-btn:hover{
+
+    background:#273244;
+}
+
+/* ---------------- WARNING ---------------- */
+
+.warning{
+
+    border-left:4px solid var(--warning);
+}
+
+/* ---------------- STEPS ---------------- */
+
+.steps{
+
+    counter-reset:step;
+}
+
+.steps li{
+
+    margin-bottom:10px;
+}
+
+/* ---------------- FOOTER ---------------- */
+
+.footer{
+
+    text-align:center;
+
+    padding:40px 20px;
+
+    color:var(--muted);
+
+    font-size:14px;
+}
+
+/* ---------------- RESPONSIVE ---------------- */
+
+@media(max-width:768px){
+
+    .hero{
+
+        padding-top:60px;
+    }
+
+    .container{
+
+        padding:16px;
+    }
+
+    .card{
+
+        padding:20px;
+    }
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="container">
+
+    <section class="hero">
+
+        <div class="badge">
+            AI Meeting Recorder • Firmware Installer
+        </div>
+
+        <h1>
+            Flash Your Device in Minutes
+        </h1>
+
+        <p>
+            Install the latest AI Meeting Recorder firmware directly
+            from your browser using ESP Web Tools. No desktop software
+            required.
+        </p>
+
+    </section>
+
+    <div class="grid">
+
+        <div class="card">
+
+            <h2>Supported Hardware</h2>
+
+            <ul>
+                <li>XIAO ESP32-S3 Sense</li>
+                <li>ESP32-S3 Chip Family</li>
+                <li>USB Data Cable Required</li>
+                <li>Chrome or Edge Browser</li>
+            </ul>
+
+        </div>
+
+        <div class="card">
+
+            <h2>Before You Start</h2>
+
+            <ul>
+                <li>Use a USB data cable</li>
+                <li>Disconnect Serial Monitor</li>
+                <li>Close Arduino IDE</li>
+                <li>Keep board powered during flashing</li>
+            </ul>
+
+        </div>
+
+    </div>
+
+    <div class="card install-card">
+
+        <h2>Install Firmware</h2>
+
+        <p>
+            Connect your AI Meeting Recorder and click below.
+        </p>
+
+        <esp-web-install-button manifest="manifest.json">
+        </esp-web-install-button>
+
+        <br>
+
+        <a href="https://youtube.com"
+           target="_blank"
+           class="link-btn">
+           Watch Installation Tutorial
+        </a>
+
+    </div>
+
+    <div class="card">
+
+        <h2>Installation Steps</h2>
+
+        <ol class="steps">
+
+            <li>Connect your XIAO ESP32-S3 Sense via USB.</li>
+
+            <li>Open Google Chrome or Microsoft Edge.</li>
+
+            <li>Click the Flash Firmware button.</li>
+
+            <li>Select the serial port of your board.</li>
+
+            <li>Allow the browser to access the device.</li>
+
+            <li>Wait until flashing completes.</li>
+
+            <li>The device will reboot automatically.</li>
+
+        </ol>
+
+    </div>
+
+    <div class="card warning">
+
+        <h2>Troubleshooting</h2>
+
+        <ul>
+
+            <li>Device not detected → Try another USB cable.</li>
+
+            <li>Port missing → Install CP210x USB drivers.</li>
+
+            <li>Failed to connect → Enter bootloader mode.</li>
+
+            <li>Manifest download error → Verify file paths.</li>
+
+            <li>GitHub Pages 404 → Check repository deployment.</li>
+
+        </ul>
+
+    </div>
+
+    <div class="card">
+
+        <h2>Browser Compatibility</h2>
+
+        <ul>
+            <li>Google Chrome (Recommended)</li>
+            <li>Microsoft Edge</li>
+            <li>Latest Chromium-based browsers</li>
+        </ul>
+
+        <p style="margin-top:12px;">
+            Safari and Firefox do not support Web Serial API
+            required by ESP Web Tools.
+        </p>
+
+    </div>
+
+    <footer class="footer">
+
+        <strong>techiesms</strong>
+
+        <br>
+
+        AI Meeting Recorder Firmware Installer
+
+    </footer>
+
+</div>
+
+</body>
+</html>

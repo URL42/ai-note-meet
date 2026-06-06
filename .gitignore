@@ -1,0 +1,20 @@
+# Secrets — never commit real credentials
+secrets.h
+config.json
+
+# Claude Code session data
+.claude/
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Arduino build artifacts
+*.bin
+*.elf
+*.map
+build/
+
+# Editor
+.vscode/
+*.swp
