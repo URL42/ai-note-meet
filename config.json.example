@@ -1,0 +1,14 @@
+{
+  "ssid": "your-wifi-ssid",
+  "pass": "your-wifi-password",
+  "el_key": "your-elevenlabs-api-key",
+  "openai_key": "sk-...",
+  "anthropic_key": "",
+  "gemini_key": "",
+  "ai_provider": "openai",
+  "ai_model": "gpt-4o-mini",
+  "local_url": "http://192.168.1.x:11434",
+  "ap_ssid": "MeetingRecorder",
+  "ap_pass": "recorder123",
+  "tz_min": 0
+}

@@ -85,7 +85,7 @@ API keys for Anthropic, Gemini, and ElevenLabs are set at runtime via the web da
 
 ### 4. SD Card
 
-Format as FAT32. No files needed to start — `config.json` is created on first save from the web dashboard. The firmware falls back to AP mode (`MeetingRecorder` / `recorder123`) if no WiFi config is found.
+Format as FAT32. Optionally copy `config.json.example` to `config.json`, fill in your credentials, and put it in the root of the SD card before first boot. If no `config.json` is found, the firmware falls back to AP mode (`MeetingRecorder` / `recorder123`) — connect to that network and open `http://192.168.4.1` to configure via the web UI, which writes `config.json` to the SD card automatically.
 
 ### 5. Flash
 
