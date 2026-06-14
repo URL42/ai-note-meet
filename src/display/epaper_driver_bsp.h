@@ -32,7 +32,8 @@ private:
 
     void spi_gpio_init();
     void spi_port_init();
-    void read_busy();
+    void read_busy();    // wait BUSY LOW  (legacy, unused in G driver)
+    void read_busy_H();  // wait BUSY HIGH (used after power-on and refresh)
 
     void set_cs_1(){gpio_set_level((gpio_num_t)lcd_spi_data.cs,1);}
     void set_cs_0(){gpio_set_level((gpio_num_t)lcd_spi_data.cs,0);}
@@ -44,11 +45,12 @@ private:
     void SPI_SendByte(uint8_t data);
     void EPD_SendData(uint8_t data);
     void EPD_SendCommand(uint8_t command);
-    void writeBytes(uint8_t *buffer,int len);
+    void writeBytes(uint8_t *buffer, int len);
     void writeBytes(const uint8_t *buffer, int len);
-    void EPD_SetWindows(uint16_t Xstart, uint16_t Ystart, uint16_t Xend, uint16_t Yend);
-    void EPD_SetCursor(uint16_t Xstart, uint16_t Ystart);
-    void EPD_SetLut(const uint8_t *lut);
+    // SSD1680-era stubs — no-ops on 4-color G display
+    void EPD_SetWindows(uint16_t, uint16_t, uint16_t, uint16_t);
+    void EPD_SetCursor(uint16_t, uint16_t);
+    void EPD_SetLut(const uint8_t *);
     void EPD_TurnOnDisplay();
     void EPD_TurnOnDisplayPart();
 

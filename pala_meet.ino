@@ -251,6 +251,8 @@ void startTransferMode() {
 
 // ─── Setup ────────────────────────────────────────────────────────────────
 void setup() {
+  keepBatteryPowerOn();  // GPIO17 power latch — must be first or board loses power
+
   Serial.begin(115200);
   delay(300);
   Serial.println("\n=== Pala Note " FIRMWARE_VERSION " ===");
@@ -267,7 +269,6 @@ void setup() {
   wakeToRecRequested  = (wokeFromUltraSleep && digitalRead(BTN_REC) == LOW);
 
   resetActivity();
-  keepBatteryPowerOn();
   delay(20);
 
   board.POWEER_EPD_ON();
@@ -287,8 +288,7 @@ void setup() {
   display = new epaper_driver_display(200, 200, dispCfg);
   display->EPD_Init();
   display->EPD_Clear();
-  display->EPD_DisplayPartBaseImage();
-  display->EPD_Init_Partial();
+  display->EPD_Display();
 
   i2c_master_Init();
   delay(50);
