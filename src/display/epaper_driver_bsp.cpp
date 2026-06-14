@@ -188,6 +188,44 @@ void epaper_driver_display::EPD_Init()
     read_busy_H();           // wait until BUSY goes HIGH
 }
 
+// ─── Fast init — same as EPD_Init but activates fast-refresh LUT ─────────────
+// Call once after the first EPD_Display(). All subsequent Display() calls will
+// then use the fast LUT (~3-5s refresh instead of ~14s), at slight quality cost.
+
+void epaper_driver_display::EPD_Init_Fast()
+{
+    set_rst_1(); vTaskDelay(pdMS_TO_TICKS(200));
+    set_rst_0(); vTaskDelay(pdMS_TO_TICKS(2));
+    set_rst_1(); vTaskDelay(pdMS_TO_TICKS(200));
+
+    EPD_SendCommand(0x4D); EPD_SendData(0x78);
+
+    EPD_SendCommand(0x00);
+    EPD_SendData(0x0F); EPD_SendData(0x29);
+
+    EPD_SendCommand(0x06);
+    EPD_SendData(0x0D); EPD_SendData(0x12); EPD_SendData(0x30);
+    EPD_SendData(0x20); EPD_SendData(0x19); EPD_SendData(0x2A); EPD_SendData(0x22);
+
+    EPD_SendCommand(0x50); EPD_SendData(0x37);
+
+    EPD_SendCommand(0x61);
+    EPD_SendData(Width  >> 8); EPD_SendData(Width  & 0xFF);
+    EPD_SendData(Height >> 8); EPD_SendData(Height & 0xFF);
+
+    EPD_SendCommand(0xE9); EPD_SendData(0x01);
+    EPD_SendCommand(0x30); EPD_SendData(0x08);
+
+    EPD_SendCommand(0x04);
+    read_busy_H();
+
+    // Fast-mode LUT activation (the three commands that make it fast)
+    EPD_SendCommand(0xE0); EPD_SendData(0x02);
+    EPD_SendCommand(0xE6); EPD_SendData(0x5D);
+    EPD_SendCommand(0xA5); EPD_SendData(0x00);
+    read_busy_H();
+}
+
 // ─── Clear — fill 1bpp buffer with white ─────────────────────────────────────
 
 void epaper_driver_display::EPD_Clear()

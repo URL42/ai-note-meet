@@ -286,9 +286,10 @@ void setup() {
   dispCfg.buffer_len = (200*200)/8;
 
   display = new epaper_driver_display(200, 200, dispCfg);
-  display->EPD_Init();
-  display->EPD_Clear();
-  display->EPD_Display();
+  display->EPD_Init();      // full-quality init + power-on
+  display->EPD_Clear();     // white buffer
+  display->EPD_Display();   // one slow full refresh to clear the panel
+  display->EPD_Init_Fast(); // switch to fast LUT (~3-5s) for all subsequent refreshes
 
   i2c_master_Init();
   delay(50);

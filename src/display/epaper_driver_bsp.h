@@ -58,9 +58,10 @@ public:
     epaper_driver_display(int width, int height,custom_lcd_spi_t _lcd_spi_data);
     ~epaper_driver_display();
 
-    void EPD_Init();    /* 墨水屏初始化 */
-    void EPD_Clear();   /* 清空屏幕 */
-    void EPD_Display(); /* 刷buffer到墨水屏 */
+    void EPD_Init();         // full-quality init (use once on boot)
+    void EPD_Init_Fast();    // fast-refresh init (call after first clear; ~3-5s vs ~14s)
+    void EPD_Clear();        // fill 1bpp buffer with white
+    void EPD_Display();      // push buffer to panel and trigger refresh
 
     /*局部刷新*/
     void EPD_DisplayPartBaseImage();
