@@ -49,8 +49,6 @@ void showDone();
 void showError(const char* msg);
 void showUltraSleepScreen();
 void showPlaybackOverlay();
-void showTransferConnecting();
-void showTransferMode(const char* ip);
 void showSettings(int cursor);
 void showDeviceInfo();
 

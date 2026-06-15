@@ -26,6 +26,7 @@
 
 #include "web_handlers.h"
 #include "../core/globals.h"
+#include "../app/network.h"
 #include "html_pages.h"              // defines PAGE_MAIN and PAGE_SETUP
 #include "../config/config.h"
 #include "../api/api.h"              // jsonEscape()
@@ -505,6 +506,9 @@ void startWebServer() {
     server.on("/api/status",  HTTP_GET,  handleApiStatus);
     server.on("/api/chat",    HTTP_POST, handleApiChat);
     server.on("/api/settime", HTTP_POST, handleApiSetTime);
+
+    // Notes portal routes (/notes/*, /api/notes, /api/notes/delete)
+    registerNoteRoutes();
 
     server.onNotFound(handle404);
     server.begin();

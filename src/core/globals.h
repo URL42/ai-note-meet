@@ -22,7 +22,7 @@
 
 // ─── AP hotspot (always on) ───────────────────────────────────────────────────
 // Default values used when no config.json exists on the SD card.
-#define AP_SSID_DEFAULT  "MeetingRecorder"
+#define AP_SSID_DEFAULT  "notemeet"
 #define AP_PASS_DEFAULT  "recorder123"
 #define CONFIG_FILE      "/config.json"
 

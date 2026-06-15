@@ -20,8 +20,6 @@ void enterUltraSleep() {
   showUltraSleepScreen();
   delay(120);
 
-  stopTransferMode();
-
   WiFi.disconnect(true);
   WiFi.mode(WIFI_OFF);
 

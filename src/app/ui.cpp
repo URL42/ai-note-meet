@@ -312,14 +312,24 @@ void showMenu(int cursor) {
   clearWhite();
   drawStr(16, 14, "menu", 1, BLACK);
   hline(16, 32, W-32, BLACK);
+  const int visibleCount = min(4, MENU_COUNT);
   const int y0 = 42, step = 36;
-  for (int row = 0; row < MENU_COUNT; row++) {
-    bool active = row == cursor;
+  // Lazy-scroll window: only moves when cursor reaches the edge
+  int windowStart = max(0, min(cursor - (visibleCount - 1), MENU_COUNT - visibleCount));
+  for (int row = 0; row < visibleCount; row++) {
+    int itemIdx = windowStart + row;
+    bool active = itemIdx == cursor;
     int y = y0 + row * step;
     if (active) fillRoundRect(16, y, 168, 31, 8, BLACK);
     else        strokeRoundRect(16, y, 168, 31, 8, 1, BLACK);
     uint8_t col = active ? WHITE : BLACK;
-    drawStrInBox(16, y, 168, 31, MENU_ITEMS[row], 1, col);
+    drawStrInBox(16, y, 168, 31, MENU_ITEMS[itemIdx], 1, col);
+  }
+  // Down-chevron when items are hidden below the window
+  if (windowStart + visibleCount < MENU_COUNT) {
+    int ax = W/2, ay = 190;
+    thickLine(ax - 6, ay - 4, ax, ay + 4, 2, BLACK);
+    thickLine(ax,     ay + 4, ax + 6, ay - 4, 2, BLACK);
   }
   refresh();
 }
@@ -493,25 +503,6 @@ void showPlaybackOverlay() {
   refresh();
 }
 
-void showTransferConnecting() {
-  clearWhite();
-  drawKicker("transfer", 18);
-  iconWifi(100, 82);
-  drawStrC(100, 138, "connecting", 1, BLACK);
-  refresh();
-}
-
-void showTransferMode(const char* ip) {
-  clearWhite();
-  drawKicker("transfer", 16);
-  fillRoundRect(26, 48, 148, 58, 16, BLACK);
-  drawStrInBox(26, 48, 148, 24, "pala portal", 1, WHITE);
-  drawStrInBox(26, 74, 148, 24, "active", 1, WHITE);
-  drawStrC(100, 124, "open browser", 1, BLACK);
-  drawStrC(100, 146, ip, 1, BLACK);
-  drawStrC(100, 169, "double rec to exit", 1, BLACK);
-  refresh();
-}
 
 void showSettings(int cursor) {
   clearWhite();
@@ -527,8 +518,6 @@ void showSettings(int cursor) {
     if (row == 0) {
       drawStr(28, y + 8, "sounds", 1, col);
       drawStr(W - 70, y + 8, palaSoundIsEnabled() ? "on" : "off", 1, col);
-    } else if (row == 1) {
-      drawStr(28, y + 8, "transfer", 1, col);
     } else {
       drawStr(28, y + 8, "device", 1, col);
     }
@@ -546,7 +535,7 @@ void showDeviceInfo() {
   drawStrFit(18, 112, 160, "ESP32-S3 ePaper 1.54", 1, BLACK);
   char b[24]; snprintf(b, sizeof(b), "%d notes", (int)noteIndex.size());
   drawStr(18, 138, b, 1, BLACK);
-  drawStr(18, 160, palaSoundIsEnabled() ? "sounds on" : "sounds off", 1, BLACK);
+  drawStr(18, 160, "notemeet.local", 1, BLACK);
   drawStr(18, 178, rtcUtcIso().length() ? "rtc set" : "rtc not set", 1, BLACK);
   refresh();
 }
@@ -559,9 +548,8 @@ void showMeetingIdle() {
   drawStr(16, 74, "RECORDER", 2, BLACK);
   hline(16, 90, W - 32, BLACK);
   drawStr(16, 108, "Hold REC to start", 1, BLACK);
-  drawStr(16, 128, "meetingrecorder", 1, BLACK);
-  drawStr(16, 146, ".local", 1, BLACK);
-  iconMicWhite(160, 100);
+  drawStr(16, 128, "notemeet.local", 1, BLACK);
+  iconMicWhite(150, 100);
   refresh();
 }
 
@@ -589,6 +577,6 @@ void showMeetingDone() {
   hline(16, 120, W - 32, BLACK);
   drawStr(20, 138, "Processing...", 1, BLACK);
   drawStr(20, 156, "See dashboard:", 1, BLACK);
-  drawStr(20, 174, "meetingrecorder.local", 1, BLACK);
+  drawStr(20, 174, "notemeet.local", 1, BLACK);
   refresh();
 }

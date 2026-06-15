@@ -25,7 +25,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawhtml(
 <meta name="theme-color" content="transparent">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>MeetingRecorder</title>
+<title>AI Note/Meet</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -299,7 +299,7 @@ body{height:100%;height:100dvh;overflow:hidden;-webkit-overflow-scrolling:touch;
   <div class="sb-head">
     <a class="logo" href="/">
       <div class="logo-icon"><svg style="width:16px;height:16px;vertical-align:middle;display:inline-block;flex-shrink:0" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><rect x="5.5" y="1.5" width="5" height="8" rx="2.5"/><path d="M3 9c0 2.76 2.24 5 5 5s5-2.24 5-5"/><line x1="8" y1="14" x2="8" y2="15.5"/></svg></div>
-      MeetRec
+      notemeet
     </a>
     <div class="spill idle" id="sPill">
       <div class="sdot"></div><span id="sTxt">Idle</span>
@@ -325,6 +325,9 @@ body{height:100%;height:100dvh;overflow:hidden;-webkit-overflow-scrolling:touch;
       <span class="ico"><svg style="width:14px;height:14px;vertical-align:middle;display:inline-block;flex-shrink:0" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><path d="M13.5 10a1.5 1.5 0 01-1.5 1.5H5L2 14.5V3.5A1.5 1.5 0 013.5 2h9A1.5 1.5 0 0114 3.5v6.5z"/></svg></span><span class="lbl">Ask AI</span>
       <span id="chatLock" style="margin-left:auto;opacity:.4"><svg style="width:11px;height:11px;vertical-align:middle;display:inline-block;flex-shrink:0" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><rect x="3.5" y="7" width="9" height="7.5" rx="1.5"/><path d="M5.5 7V5.5a2.5 2.5 0 015 0V7"/></svg></span>
     </button>
+    <button class="ni" data-tab="notes">
+      <span class="ico"><svg style="width:14px;height:14px;vertical-align:middle;display:inline-block;flex-shrink:0" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><rect x="5.5" y="1.5" width="5" height="8" rx="2.5"/><path d="M3 9c0 2.76 2.24 5 5 5s5-2.24 5-5"/><line x1="8" y1="14" x2="8" y2="15.5"/></svg></span><span class="lbl">Notes</span>
+    </button>
     <button class="ni" data-tab="settings">
       <span class="ico"><svg style="width:14px;height:14px;vertical-align:middle;display:inline-block;flex-shrink:0" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="2.5"/><path d="M12.9 5.5l-.8-1-1.3.5a4.5 4.5 0 00-1.1-.65L9.4 3H6.6l-.3 1.35a4.5 4.5 0 00-1.1.65L3.9 4.5l-.8 1 .8 1a4.5 4.5 0 000 1.5l-.8 1 .8 1 1.3-.5a4.5 4.5 0 001.1.65L6.6 12h2.8l.3-1.35a4.5 4.5 0 001.1-.65l1.3.5.8-1-.8-1a4.5 4.5 0 000-1.5l.8-1z"/></svg></span><span class="lbl">Settings</span>
     </button>
@@ -344,7 +347,6 @@ body{height:100%;height:100dvh;overflow:hidden;-webkit-overflow-scrolling:touch;
     <span class="tb-title" id="pgTitle">Dashboard</span>
     <div class="tb-pill idle" id="sPillMob"><div class="sdot"></div><span id="sTxtMob">Idle</span></div>
     <div class="tb-right">
-      <a class="tb-brand" href="https://www.youtube.com/@techiesms" target="_blank" rel="noopener noreferrer" title="Visit techiesms on YouTube">techiesms</a>
       <div id="wvf" class="wvf" style="display:none">
         <div class="wb"></div><div class="wb"></div><div class="wb"></div>
         <div class="wb"></div><div class="wb"></div>
@@ -434,6 +436,22 @@ body{height:100%;height:100dvh;overflow:hidden;-webkit-overflow-scrolling:touch;
   </div>
 
   <!-- ─── Chat ─── -->
+  <!-- ─── Notes ─── -->
+  <div class="content tab" id="tab-notes">
+    <div class="tab-head">
+      <span class="tab-title">Voice Notes</span>
+      <div style="display:flex;gap:8px;align-items:center">
+        <select id="noteTagFilter" onchange="filterNotes()" style="cursor:pointer;background:var(--bg3);color:var(--t0);border:1px solid var(--border2);border-radius:var(--rsm);padding:5px 10px;font-size:12px;font-family:var(--f)">
+          <option value="">All tags</option>
+        </select>
+        <button class="btn btn-s btn-sm" onclick="loadNotes(true)"><svg style="width:12px;height:12px;vertical-align:middle;display:inline-block;margin-right:4px" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M13 8A5 5 0 113 8"/><polyline points="13 4.5 13 8 9.5 8"/></svg>Refresh</button>
+      </div>
+    </div>
+    <div id="notesList">
+      <div class="hempty"><div class="ei"><svg style="width:32px;height:32px;vertical-align:middle;display:inline-block;" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5.5" y="1.5" width="5" height="8" rx="2.5"/><path d="M3 9c0 2.76 2.24 5 5 5s5-2.24 5-5"/><line x1="8" y1="14" x2="8" y2="15.5"/></svg></div><p>Loading notes&hellip;</p></div>
+    </div>
+  </div>
+
   <div class="chat-wrap" id="tab-chat">
     <div class="chat-ctx-banner" id="chatCtxBanner" style="display:none">
       <span><svg style="width:13px;height:13px;vertical-align:middle;display:inline-block;flex-shrink:0" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="6"/><polyline points="8 5 8 8 10.5 10.5"/></svg></span>
@@ -613,6 +631,9 @@ body{height:100%;height:100dvh;overflow:hidden;-webkit-overflow-scrolling:touch;
   <button class="bni locked-bnav" id="bniChat" data-tab="chat" onclick="goTab('chat')">
     <span class="bni-ico"><svg style="width:18px;height:18px;vertical-align:middle;display:inline-block;flex-shrink:0" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><path d="M13.5 10a1.5 1.5 0 01-1.5 1.5H5L2 14.5V3.5A1.5 1.5 0 013.5 2h9A1.5 1.5 0 0114 3.5v6.5z"/></svg></span><span class="bni-lbl">Ask AI</span>
   </button>
+  <button class="bni" data-tab="notes" onclick="goTab('notes')">
+    <span class="bni-ico"><svg style="width:18px;height:18px;vertical-align:middle;display:inline-block;flex-shrink:0" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><rect x="5.5" y="1.5" width="5" height="8" rx="2.5"/><path d="M3 9c0 2.76 2.24 5 5 5s5-2.24 5-5"/><line x1="8" y1="14" x2="8" y2="15.5"/></svg></span><span class="bni-lbl">Notes</span>
+  </button>
   <button class="bni" data-tab="settings" onclick="goTab('settings')">
     <span class="bni-ico"><svg style="width:18px;height:18px;vertical-align:middle;display:inline-block;flex-shrink:0" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="2.5"/><path d="M12.9 5.5l-.8-1-1.3.5a4.5 4.5 0 00-1.1-.65L9.4 3H6.6l-.3 1.35a4.5 4.5 0 00-1.1.65L3.9 4.5l-.8 1 .8 1a4.5 4.5 0 000 1.5l-.8 1 .8 1 1.3-.5a4.5 4.5 0 001.1.65L6.6 12h2.8l.3-1.35a4.5 4.5 0 001.1-.65l1.3.5.8-1-.8-1a4.5 4.5 0 000-1.5l.8-1z"/></svg></span><span class="bni-lbl">More</span>
   </button>
@@ -625,7 +646,7 @@ body{height:100%;height:100dvh;overflow:hidden;-webkit-overflow-scrolling:touch;
 /* ── State ───────────────────────────── */
 var tab='dashboard', prevState='', meetingStart=null, durTimer=null,
     chatHist=[], summaryReady=false, recBusy=false,
-    histLoaded=false, histItems=[],
+    histLoaded=false, histItems=[], notesLoaded=false, notesData=[],
     chatMode='current', histCtxSummary='', histCtxName='', histCtxDir='';
 
 /* ── Simple markdown → HTML renderer ── */
@@ -674,7 +695,7 @@ function renderAns(s){
 }
 
 /* ── Navigation ──────────────────────── */
-var TITLES={dashboard:'Dashboard',transcript:'Transcript',summary:'Summary',history:'History',chat:'Ask AI',settings:'Settings'};
+var TITLES={dashboard:'Dashboard',transcript:'Transcript',summary:'Summary',history:'History',chat:'Ask AI',notes:'Notes',settings:'Settings'};
 document.querySelectorAll('.ni[data-tab]').forEach(function(b){b.addEventListener('click',function(){goTab(b.dataset.tab)})});
 
 function goTab(id){
@@ -690,6 +711,7 @@ function goTab(id){
   document.getElementById('pgTitle').textContent=TITLES[id]||id;
   tab=id;
   if(id==='history'&&!histLoaded) loadHistory(false);
+  if(id==='notes'&&!notesLoaded) loadNotes(false);
 }
 
 /* ── Toast ───────────────────────────── */
@@ -1193,6 +1215,64 @@ function pickWifi(ssid){
   document.getElementById('cSSID').value=ssid;
   document.getElementById('wifiList').style.display='none';
   document.getElementById('cPass').focus();
+}
+
+/* ── Notes ──────────────────────────── */
+function loadNotes(force){
+  if(notesLoaded&&!force)return;
+  fetch('/api/notes').then(function(r){return r.json()}).then(function(d){
+    notesData=d.notes||[];
+    notesLoaded=true;
+    var sel=document.getElementById('noteTagFilter');
+    sel.innerHTML='<option value="">All tags</option>';
+    (d.tags||[]).forEach(function(t){
+      var o=document.createElement('option');
+      o.value=t;o.textContent=t;sel.appendChild(o);
+    });
+    renderNotes();
+  }).catch(function(){
+    document.getElementById('notesList').innerHTML='<div class="hempty"><p>Failed to load notes. Check WiFi connection.</p></div>';
+  });
+}
+function filterNotes(){renderNotes();}
+function renderNotes(){
+  var filter=document.getElementById('noteTagFilter').value;
+  var filtered=notesData.filter(function(n){return!filter||n.tag===filter;});
+  var el=document.getElementById('notesList');
+  if(filtered.length===0){
+    el.innerHTML='<div class="hempty"><div class="ei"><svg style="width:32px;height:32px" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5.5" y="1.5" width="5" height="8" rx="2.5"/><path d="M3 9c0 2.76 2.24 5 5 5s5-2.24 5-5"/><line x1="8" y1="14" x2="8" y2="15.5"/></svg></div><p>'+(filter?'No notes with tag &ldquo;'+escHtml(filter)+'&rdquo;.':'No voice notes yet. Record one on the device.')+'</p></div>';
+    return;
+  }
+  var html='';
+  filtered.forEach(function(n){
+    var num=String(n.num).padStart(3,'0');
+    html+='<div class="hcard">';
+    html+='<div class="hc-top"><span class="hc-ts">#'+num+'</span>';
+    if(n.created){var cd=new Date(n.created);if(!isNaN(cd))html+='<span class="hc-ts" style="color:var(--t2)">'+cd.toLocaleString([],{month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'})+'</span>';}
+    html+='<span style="margin-left:auto;font-size:11px;padding:2px 8px;border-radius:10px;background:var(--agl);color:var(--accent2)">'+escHtml(n.tag)+'</span>';
+    html+='</div>';
+    if(n.transcript){
+      html+='<div class="hc-sum" style="margin:8px 0;font-size:13px;color:var(--t1);line-height:1.5">'+escHtml(n.transcript)+'</div>';
+    }else{
+      html+='<div class="hc-sum" style="margin:8px 0;font-size:13px;color:var(--t2);font-style:italic">Not synced yet &mdash; use Sync on the device.</div>';
+    }
+    if(n.hasWav){
+      html+='<audio controls src="/notes/audio?num='+n.num+'" style="width:100%;margin:6px 0;height:32px"></audio>';
+    }
+    html+='<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">';
+    if(n.hasText){html+='<a href="/notes/txt?num='+n.num+'" class="btn btn-s btn-sm" download>Download TXT</a>';}
+    if(n.hasWav){html+='<a href="/notes/wav?num='+n.num+'" class="btn btn-s btn-sm" download>Download WAV</a>';}
+    html+='<button class="btn btn-s btn-sm" style="margin-left:auto;color:var(--red);border-color:var(--red)" onclick="deleteNoteCard('+n.num+')">Delete</button>';
+    html+='</div></div>';
+  });
+  el.innerHTML=html;
+}
+function deleteNoteCard(num){
+  if(!confirm('Delete note #'+String(num).padStart(3,'0')+'? This cannot be undone.'))return;
+  fetch('/api/notes/delete?num='+num).then(function(r){return r.json()}).then(function(d){
+    if(d.ok){toast('Note deleted','ok');loadNotes(true);}
+    else toast('Delete failed','err');
+  }).catch(function(){toast('Delete failed','err');});
 }
 
 /* ── Settings ───────────────────────── */

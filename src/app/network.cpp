@@ -10,8 +10,10 @@
 #include "WiFiClientSecure.h"
 #include <WebServer.h>
 #include "SD_MMC.h"
-#include "esp_heap_caps.h"
 #include "../../secrets.h"
+
+// Main server on port 80 — declared in pala_meet.ino, externed in src/core/globals.h
+extern WebServer server;
 
 static String parseWhisperText(const String& resp) {
   int s = resp.indexOf("\"text\":\"");
@@ -51,7 +53,7 @@ static bool transcribeOnce(const String& wavPath, int noteNum) {
   size_t totalLen = pre.length() + fileSize + post.length();
 
   WiFiClientSecure client;
-  client.setInsecure();  // TODO: pin api.openai.com cert for production use
+  client.setInsecure();
   client.setTimeout(90);
 
   if (!client.connect("api.openai.com", 443)) { f.close(); return false; }
@@ -105,6 +107,10 @@ static bool transcribeOnce(const String& wavPath, int noteNum) {
   if (tf) { tf.print(text); tf.close(); }
 
   updateIndexHasText(noteNum);
+
+  // WAV served its purpose — delete it to free SD space.
+  SD_MMC.remove(wavPath.c_str());
+
   return true;
 }
 
@@ -195,28 +201,29 @@ void handlePortalRoot() {
   loadIndex();
 
   String filter = "All";
-  if (transferServer.hasArg("tag")) filter = transferServer.arg("tag");
+  if (server.hasArg("tag")) filter = server.arg("tag");
 
   String html = "<!doctype html><html><head><meta charset='utf-8'>"
                 "<meta name='viewport' content='width=device-width,initial-scale=1'>"
-                "<title>Pala Portal</title>" + portalCss() + "</head><body><div class='wrap'>";
+                "<title>Voice Notes · notemeet</title>" + portalCss() + "</head><body><div class='wrap'>";
 
-  html += "<div class='top'><div><h1>pala<br>portal</h1>"
-          "<div class='sub'>local note transfer · <a href=\"/tags\" style=\"color:inherit\">tags</a></div></div>"
+  html += "<div class='top'><div><h1>voice<br>notes</h1>"
+          "<div class='sub'>notemeet · <a href=\"/notes/tags\" style=\"color:inherit\">tags</a>"
+          " · <a href=\"/\" style=\"color:inherit\">dashboard</a></div></div>"
           "<div class='pill'>" + String((int)noteIndex.size()) + " notes</div></div>";
 
   html += "<div class='actions' style='margin-bottom:18px'>";
-  html += "<a class='btn " + String(filter == "All" ? "primary" : "") + "' href='/'>All</a>";
+  html += "<a class='btn " + String(filter == "All" ? "primary" : "") + "' href='/notes'>All</a>";
   for (int t = 0; t < tagCount; t++) {
     String tag = String(tags[t]);
-    html += "<a class='btn " + String(filter == tag ? "primary" : "") + "' href='/?tag=" + tag + "'>" + htmlEscape(tag) + "</a>";
+    html += "<a class='btn " + String(filter == tag ? "primary" : "") + "' href='/notes?tag=" + tag + "'>" + htmlEscape(tag) + "</a>";
   }
   html += "</div>";
 
   html += "<div class='actions' style='margin-bottom:24px'>";
-  html += "<a class='btn primary' href='/export.txt'>Download all TXT</a>";
+  html += "<a class='btn primary' href='/notes/export.txt'>Download all TXT</a>";
   if (filter != "All")
-    html += "<a class='btn' href='/export.txt?tag=" + filter + "'>Download " + htmlEscape(filter) + " TXT</a>";
+    html += "<a class='btn' href='/notes/export.txt?tag=" + filter + "'>Download " + htmlEscape(filter) + " TXT</a>";
   html += "</div>";
 
   int visibleCount = 0;
@@ -257,13 +264,13 @@ void handlePortalRoot() {
       html += "<div class='tag'>" + htmlEscape(String(noteIndex[i].tag)) + "</div></div>";
       html += "<p class='text'>" + htmlEscape(transcript) + "</p>";
       if (SD_MMC.exists(wavPath))
-        html += "<audio controls src='/audio?num=" + String(num) + "'></audio>";
+        html += "<audio controls src='/notes/audio?num=" + String(num) + "'></audio>";
       html += "<div class='actions'>";
-      html += "<a class='btn primary' href='/txt?num=" + String(num) + "'>Download TXT</a>";
+      html += "<a class='btn primary' href='/notes/txt?num=" + String(num) + "'>Download TXT</a>";
       if (SD_MMC.exists(wavPath))
-        html += "<a class='btn' href='/wav?num=" + String(num) + "'>Download WAV</a>";
+        html += "<a class='btn' href='/notes/wav?num=" + String(num) + "'>Download WAV</a>";
       html += "<a class='btn' style='margin-left:auto;color:#c0392b;border-color:#c0392b' "
-              "href='/note/delete?num=" + String(num) + "' "
+              "href='/notes/note/delete?num=" + String(num) + "' "
               "onclick=\"return confirm('Delete note #" + String(num) + "? This cannot be undone.')\">Delete</a>";
       html += "</div></div>";
     }
@@ -277,31 +284,55 @@ void handlePortalRoot() {
           "});"
           "</script>";
   html += "</div></body></html>";
-  transferServer.send(200, "text/html", html);
+  server.send(200, "text/html", html);
 }
 
+// JSON API — used by the dashboard SPA Notes tab
 void handlePortalJson() {
   loadIndex();
-  String json = "[";
+  String json = "{\"notes\":[";
   for (int v = 0; v < (int)noteIndex.size(); v++) {
     int i = (int)noteIndex.size() - 1 - v;
     if (v > 0) json += ",";
+    int num = noteIndex[i].num;
+    char txtPath[64], wavPath[64];
+    snprintf(txtPath, sizeof(txtPath), "%s/note_%03d.txt", NOTES_DIR, num);
+    snprintf(wavPath, sizeof(wavPath), "%s/note_%03d.wav", NOTES_DIR, num);
+    bool hasWav = SD_MMC.exists(wavPath);
+    String transcript = "";
+    if (noteIndex[i].hasText) {
+      transcript = readSmallFile(txtPath, 500);
+      // JSON-escape the snippet
+      transcript.replace("\\", "\\\\");
+      transcript.replace("\"", "\\\"");
+      transcript.replace("\n", " ");
+      transcript.replace("\r", "");
+    }
+    String created = noteCreatedUtc(num);
     json += "{";
-    json += "\"num\":" + String(noteIndex[i].num) + ",";
-    json += "\"tag\":\"" + String(noteIndex[i].tag) + "\",";
-    json += "\"hasText\":" + String(noteIndex[i].hasText ? "true" : "false");
+    json += "\"num\":" + String(num) + ",";
+    json += "\"tag\":\"" + htmlEscape(String(noteIndex[i].tag)) + "\",";
+    json += "\"hasText\":" + String(noteIndex[i].hasText ? "true" : "false") + ",";
+    json += "\"hasWav\":" + String(hasWav ? "true" : "false") + ",";
+    json += "\"transcript\":\"" + transcript + "\",";
+    json += "\"created\":\"" + created + "\"";
     json += "}";
   }
-  json += "]";
-  transferServer.send(200, "application/json", json);
+  json += "],\"tags\":[";
+  for (int t = 0; t < tagCount; t++) {
+    if (t > 0) json += ",";
+    json += "\"" + htmlEscape(String(tags[t])) + "\"";
+  }
+  json += "]}";
+  server.send(200, "application/json", json);
 }
 
 void handleExportTxt() {
   loadIndex();
   String filter = "All";
-  if (transferServer.hasArg("tag")) filter = transferServer.arg("tag");
+  if (server.hasArg("tag")) filter = server.arg("tag");
 
-  String exportText = "Pala Note Export\nFilter: " + filter + "\n------------------------------\n\n";
+  String exportText = "Voice Notes Export · notemeet\nFilter: " + filter + "\n------------------------------\n\n";
 
   for (int v = 0; v < (int)noteIndex.size(); v++) {
     int i = (int)noteIndex.size() - 1 - v;
@@ -324,50 +355,50 @@ void handleExportTxt() {
     }
   }
 
-  String filename = "pala_notes_export";
+  String filename = "notes_export";
   if (filter != "All") filename += "_" + filter;
   filename += ".txt";
-  transferServer.sendHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
-  transferServer.send(200, "text/plain", exportText);
+  server.sendHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
+  server.send(200, "text/plain", exportText);
 }
 
 void sendFileByNum(const char* ext, const char* mime, bool attachment) {
-  if (!transferServer.hasArg("num")) { transferServer.send(400, "text/plain", "Missing num"); return; }
-  int num = transferServer.arg("num").toInt();
-  if (num <= 0) { transferServer.send(400, "text/plain", "Invalid num"); return; }
+  if (!server.hasArg("num")) { server.send(400, "text/plain", "Missing num"); return; }
+  int num = server.arg("num").toInt();
+  if (num <= 0) { server.send(400, "text/plain", "Invalid num"); return; }
   char path[64]; snprintf(path, sizeof(path), "%s/note_%03d.%s", NOTES_DIR, num, ext);
   File f = SD_MMC.open(path);
-  if (!f) { transferServer.send(404, "text/plain", "File not found"); return; }
+  if (!f) { server.send(404, "text/plain", "File not found"); return; }
   if (attachment) {
     String filename = String("note_") + String(num) + "." + String(ext);
-    transferServer.sendHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
+    server.sendHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
   }
-  transferServer.streamFile(f, mime);
+  server.streamFile(f, mime);
   f.close();
 }
 
 void handleTagAdd() {
-  if (!transferServer.hasArg("name")) {
-    transferServer.sendHeader("Location", "/tags?msg=missing");
-    transferServer.send(303); return;
+  if (!server.hasArg("name")) {
+    server.sendHeader("Location", "/notes/tags?msg=missing");
+    server.send(303); return;
   }
-  String name = urlDecodeSimple(transferServer.arg("name"));
+  String name = urlDecodeSimple(server.arg("name"));
   bool ok = addCustomTag(name.c_str());
-  transferServer.sendHeader("Location", ok ? "/tags?msg=added" : "/tags?msg=exists");
-  transferServer.send(303);
+  server.sendHeader("Location", ok ? "/notes/tags?msg=added" : "/notes/tags?msg=exists");
+  server.send(303);
 }
 
 void handleTagDelete() {
-  if (!transferServer.hasArg("name")) {
-    transferServer.sendHeader("Location", "/tags?msg=missing");
-    transferServer.send(303); return;
+  if (!server.hasArg("name")) {
+    server.sendHeader("Location", "/notes/tags?msg=missing");
+    server.send(303); return;
   }
-  String name = urlDecodeSimple(transferServer.arg("name"));
+  String name = urlDecodeSimple(server.arg("name"));
   bool hadNotes = tagHasNotes(name.c_str());
   bool ok = deleteTag(name.c_str());
-  if (ok && hadNotes) transferServer.sendHeader("Location", "/tags?msg=moved");
-  else                transferServer.sendHeader("Location", ok ? "/tags?msg=deleted" : "/tags?msg=protected");
-  transferServer.send(303);
+  if (ok && hadNotes) server.sendHeader("Location", "/notes/tags?msg=moved");
+  else                server.sendHeader("Location", ok ? "/notes/tags?msg=deleted" : "/notes/tags?msg=protected");
+  server.send(303);
 }
 
 void handleTagsPage() {
@@ -377,7 +408,7 @@ void handleTagsPage() {
 
   String html = "<!doctype html><html><head><meta charset='utf-8'>"
                 "<meta name='viewport' content='width=device-width,initial-scale=1'>"
-                "<title>Pala Tags</title>"
+                "<title>Tags · notemeet</title>"
                 "<style>"
                 "body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;margin:0;padding:24px;background:#f3f0e9;color:#111}"
                 ".wrap{max-width:720px;margin:0 auto}"
@@ -396,10 +427,10 @@ void handleTagsPage() {
                 "</style></head><body><div class='wrap'>";
 
   html += "<h1>pala<br>tags</h1>";
-  html += "<a class='btn' href='/'>Back to notes</a>";
+  html += "<a class='btn' href='/notes'>Back to notes</a>";
 
-  if (transferServer.hasArg("msg")) {
-    String msg = transferServer.arg("msg");
+  if (server.hasArg("msg")) {
+    String msg = server.arg("msg");
     html += "<div class='msg'>";
     if (msg == "added") html += "Tag added.";
     else if (msg == "exists")    html += "Tag already exists or cannot be added.";
@@ -410,7 +441,7 @@ void handleTagsPage() {
     html += "</div>";
   }
 
-  html += "<div class='card'><form class='add' action='/tag/add' method='get'>"
+  html += "<div class='card'><form class='add' action='/notes/tag/add' method='get'>"
           "<input name='name' maxlength='31' placeholder='New tag name'>"
           "<button type='submit'>Add</button></form>"
           "<p class='hint'>Tags appear on the device after recording. Keep them short for the e-paper UI.</p></div>";
@@ -425,46 +456,47 @@ void handleTagsPage() {
     if (cnt > 0) html += " · deleting moves them to Untagged";
     html += "</div></div>";
     if (strcasecmp(tags[i], "Untagged") != 0) {
-      html += "<a class='btn danger' href='/tag/delete?name=" + htmlEscape(String(tags[i])) + "' "
+      html += "<a class='btn danger' href='/notes/tag/delete?name=" + htmlEscape(String(tags[i])) + "' "
               "onclick=\"return confirm('Delete this tag? Notes will not be deleted. Existing notes will move to Untagged.');\">Delete</a>";
     }
     html += "</div>";
   }
   html += "</div></div></body></html>";
-  transferServer.send(200, "text/html", html);
+  server.send(200, "text/html", html);
 }
 
 void handleNoteDelete() {
-  if (!transferServer.hasArg("num")) { transferServer.send(400, "text/plain", "Missing num"); return; }
-  int num = transferServer.arg("num").toInt();
-  if (num <= 0) { transferServer.send(400, "text/plain", "Invalid num"); return; }
+  if (!server.hasArg("num")) { server.send(400, "text/plain", "Missing num"); return; }
+  int num = server.arg("num").toInt();
+  if (num <= 0) { server.send(400, "text/plain", "Invalid num"); return; }
   deleteNote(num);
-  transferServer.sendHeader("Location", "/");
-  transferServer.send(303);
+  server.sendHeader("Location", "/notes");
+  server.send(303);
 }
 
-void setupTransferServer() {
-  transferServer.on("/", HTTP_GET, handlePortalRoot);
-  transferServer.on("/tags", HTTP_GET, handleTagsPage);
-  transferServer.on("/tag/add", HTTP_GET, handleTagAdd);
-  transferServer.on("/tag/delete", HTTP_GET, handleTagDelete);
-  transferServer.on("/note/delete", HTTP_GET, handleNoteDelete);
-  transferServer.on("/api/notes", HTTP_GET, handlePortalJson);
-  transferServer.on("/export.txt", HTTP_GET, handleExportTxt);
-  transferServer.on("/txt",   HTTP_GET, [](){ sendFileByNum("txt", "text/plain", true); });
-  transferServer.on("/wav",   HTTP_GET, [](){ sendFileByNum("wav", "audio/wav",  true); });
-  transferServer.on("/audio", HTTP_GET, [](){ sendFileByNum("wav", "audio/wav",  false); });
-  transferServer.onNotFound([](){
-    transferServer.send(404, "text/plain", "Not found");
-  });
-}
-
-void stopTransferMode() {
-  if (transferServerActive) {
-    transferServer.stop();
-    transferServerActive = false;
+// JSON delete endpoint for the SPA Notes tab
+static void handleApiNoteDelete() {
+  if (!server.hasArg("num")) {
+    server.send(400, "application/json", "{\"ok\":false,\"err\":\"missing num\"}"); return;
   }
-  WiFi.disconnect(true);
-  WiFi.mode(WIFI_OFF);
-  transferUrl = "";
+  int num = server.arg("num").toInt();
+  if (num <= 0) {
+    server.send(400, "application/json", "{\"ok\":false,\"err\":\"invalid num\"}"); return;
+  }
+  deleteNote(num);
+  server.send(200, "application/json", "{\"ok\":true}");
+}
+
+void registerNoteRoutes() {
+  server.on("/notes",             HTTP_GET, handlePortalRoot);
+  server.on("/notes/tags",        HTTP_GET, handleTagsPage);
+  server.on("/notes/tag/add",     HTTP_GET, handleTagAdd);
+  server.on("/notes/tag/delete",  HTTP_GET, handleTagDelete);
+  server.on("/notes/note/delete", HTTP_GET, handleNoteDelete);
+  server.on("/api/notes",         HTTP_GET, handlePortalJson);
+  server.on("/api/notes/delete",  HTTP_GET, handleApiNoteDelete);
+  server.on("/notes/export.txt",  HTTP_GET, handleExportTxt);
+  server.on("/notes/txt",   HTTP_GET, [](){ sendFileByNum("txt", "text/plain", true); });
+  server.on("/notes/wav",   HTTP_GET, [](){ sendFileByNum("wav", "audio/wav",  true); });
+  server.on("/notes/audio", HTTP_GET, [](){ sendFileByNum("wav", "audio/wav",  false); });
 }

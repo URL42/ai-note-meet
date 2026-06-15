@@ -13,7 +13,6 @@ typedef enum {
   STATE_DELETE_CONFIRM,
   STATE_SETTINGS,
   STATE_DEVICE_INFO,
-  STATE_TRANSFER,
   STATE_ERROR,
   STATE_MEETING_IDLE,
   STATE_MEETING_RECORDING,
@@ -27,7 +26,7 @@ struct NoteEntry { int num; char tag[32]; bool hasText; };
 // Content array sizes — used across notes, ui, and main loop.
 #define DEFAULT_TAG_COUNT 5
 #define MENU_COUNT        5
-#define SETTINGS_COUNT    3
+#define SETTINGS_COUNT    2
 
 extern const char* DEFAULT_TAGS[];
 extern const char* MENU_ITEMS[];

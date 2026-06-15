@@ -25,9 +25,7 @@ extern uint32_t  tickerLastMs;
 extern int       tickerOffset;
 extern int       tickerCursor;
 
-extern WebServer transferServer;
-extern bool      transferServerActive;
-extern String    transferUrl;
+// Notes served via main server (port 80) — no separate transfer server
 
 extern bool      timeReady;
 

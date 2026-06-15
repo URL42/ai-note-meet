@@ -60,15 +60,15 @@ void meetSetup() {
     }
 
     // Start AP
-    String ssid = apSSID.length() > 0 ? apSSID : "MeetingRecorder";
+    String ssid = apSSID.length() > 0 ? apSSID : "notemeet";
     String pass = apPass.length() > 0 ? apPass : "recorder123";
     WiFi.softAP(ssid.c_str(), pass.c_str());
     Serial.println("[WiFi] AP: " + ssid + " @ " + WiFi.softAPIP().toString());
 
     // mDNS
-    if (MDNS.begin("meetingrecorder")) {
+    if (MDNS.begin("notemeet")) {
         MDNS.addService("http", "tcp", 80);
-        Serial.println("[mDNS] meetingrecorder.local");
+        Serial.println("[mDNS] notemeet.local");
     }
 
     // Web server routes + start

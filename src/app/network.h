@@ -18,5 +18,4 @@ void handleTagAdd();
 void handleTagDelete();
 void handleNoteDelete();
 
-void setupTransferServer();
-void stopTransferMode();
+void registerNoteRoutes();  // called by startWebServer() to register /notes/* routes

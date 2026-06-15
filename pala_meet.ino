@@ -53,7 +53,7 @@ extern "C" {
 // ─── Content arrays ───────────────────────────────────────────────────────
 const char* DEFAULT_TAGS[]    = { "Note", "Work", "Idea", "Buy", "Private" };
 const char* MENU_ITEMS[]     = { "Notes", "Tags", "Meet", "Sync", "Settings" };
-const char* SETTINGS_ITEMS[] = { "Sounds", "Transfer", "Device" };
+const char* SETTINGS_ITEMS[] = { "Sounds", "Device" };
 
 // ─── Global variable definitions ─────────────────────────────────────────
 board_power_bsp_t      board(EPD_PWR_PIN, Audio_PWR_PIN, VBAT_PWR_PIN);
@@ -79,9 +79,7 @@ uint32_t tickerLastMs = 0;
 int      tickerOffset = 0;
 int      tickerCursor = -1;
 
-WebServer transferServer(8080);  // port changed — port 80 used by meeting server
-bool      transferServerActive = false;
-String    transferUrl          = "";
+// Notes served via main server (port 80) — no separate WebServer instance
 
 // ─── Meeting mode globals ─────────────────────────────────────────────────
 // WebServer on port 80 — used by MeetingRecorder web dashboard.
@@ -218,36 +216,6 @@ void startSyncFlow() {
   }
 }
 
-void startTransferMode() {
-  state = STATE_TRANSFER;
-  showTransferConnecting();
-
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASS);
-
-  const int MAX_TRIES = 24;
-  int tries = 0;
-  while (WiFi.status() != WL_CONNECTED && tries < MAX_TRIES) {
-    delay(500); tries++;
-  }
-
-  if (WiFi.status() != WL_CONNECTED) {
-    showError("NO WIFI");
-    delay(1600);
-    state = STATE_SETTINGS;
-    showSettings(settingsCursor);
-    return;
-  }
-
-  syncTimeFromNTP(8000);
-  setupTransferServer();
-  transferServer.begin();
-  transferServerActive = true;
-
-  IPAddress ip = WiFi.localIP();
-  transferUrl = ip.toString();
-  showTransferMode(transferUrl.c_str());
-}
 
 // ─── Setup ────────────────────────────────────────────────────────────────
 void setup() {
@@ -323,7 +291,7 @@ void setup() {
 // ─── Main loop ────────────────────────────────────────────────────────────
 void loop() {
 
-  if (state != STATE_RECORDING && state != STATE_TRANSFER
+  if (state != STATE_RECORDING
       && state != STATE_MEETING_RECORDING && state != STATE_MEETING_DONE) {
     if (millis() - lastActivityMs > ULTRA_SLEEP_MS
         && !meetIsRecording() && !meetIsProcessing()) {
@@ -340,8 +308,6 @@ void loop() {
       return;
     }
   }
-
-  if (transferServerActive) transferServer.handleClient();
 
   // Battery warning: dismiss after 2.5 s without blocking
   if (batWarnActive && millis() >= batWarnShowUntilMs) {
@@ -459,8 +425,6 @@ void loop() {
       if (settingsCursor == 0) {
         palaSoundSetEnabled(!palaSoundIsEnabled());
         showSettings(settingsCursor);
-      } else if (settingsCursor == 1) {
-        startTransferMode();
       } else {
         state = STATE_DEVICE_INFO;
         showDeviceInfo();
@@ -505,7 +469,7 @@ void loop() {
     } else {
       uint32_t elapsed = (millis() - recStartMs) / 1000;
       static uint32_t lastDispMs = 0;
-      if (millis() - lastDispMs > 5000) {
+      if (millis() - lastDispMs > 30000) {
         lastDispMs = millis();
         showMeetingRecording(elapsed);
       }
@@ -534,18 +498,6 @@ void loop() {
 
     if (rec == EV_DOUBLE || rec == EV_LONG || rec == EV_SINGLE || pwr == EV_SINGLE) {
       soundBack();
-      state = STATE_SETTINGS;
-      showSettings(settingsCursor);
-    }
-  }
-
-  // TRANSFER MODE ───────────────────────────────────────────────────────
-  else if (state == STATE_TRANSFER) {
-    if (transferServerActive) transferServer.handleClient();
-    ButtonEvent rec = readButtonEvent(BTN_REC);
-    if (rec == EV_DOUBLE || rec == EV_LONG) {
-      soundBack();
-      stopTransferMode();
       state = STATE_SETTINGS;
       showSettings(settingsCursor);
     }
