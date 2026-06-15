@@ -52,7 +52,7 @@ extern "C" {
 
 // ─── Content arrays ───────────────────────────────────────────────────────
 const char* DEFAULT_TAGS[]    = { "Note", "Work", "Idea", "Buy", "Private" };
-const char* MENU_ITEMS[]     = { "Notes", "Tags", "Meet", "Sync", "Settings" };
+const char* MENU_ITEMS[]     = { "Record", "Notes", "Tags", "Meet", "Sync", "Settings" };
 const char* SETTINGS_ITEMS[] = { "Sounds", "Device" };
 
 // ─── Global variable definitions ─────────────────────────────────────────
@@ -283,8 +283,6 @@ void setup() {
     menuCursor = 0;
     state = STATE_MENU;
     showMenu(menuCursor);
-  } else if (wakeToRecRequested) {
-    startRecordFlow();
   } else {
     showIdle();
   }
@@ -372,10 +370,9 @@ void loop() {
 
   // IDLE ─────────────────────────────────────────────────────────────────
   if (state == STATE_IDLE) {
-    if (handleIdleRec()) return;
-
+    ButtonEvent rec = readButtonEvent(BTN_REC);
     ButtonEvent pwr = readButtonEvent(BTN_PWR);
-    if (pwr == EV_SINGLE || pwr == EV_LONG) {
+    if (rec != EV_NONE || pwr != EV_NONE) {
       soundSelect();
       menuCursor = 0;
       state = STATE_MENU;
@@ -411,17 +408,19 @@ void loop() {
     } else if (rec == EV_SINGLE) {
       soundSelect();
       if (menuCursor == 0) {
+        startRecordFlow();
+      } else if (menuCursor == 1) {
         activeFilter = -1; listCursor = 0;
         state = STATE_NOTE_LIST;
         showNoteList(listCursor);
-      } else if (menuCursor == 1) {
+      } else if (menuCursor == 2) {
         tagCursor = 0;
         state = STATE_TAG_BROWSER;
         showTagBrowser(tagCursor);
-      } else if (menuCursor == 2) {
+      } else if (menuCursor == 3) {
         state = STATE_MEETING_IDLE;
         showMeetingIdle();
-      } else if (menuCursor == 3) {
+      } else if (menuCursor == 4) {
         startSyncFlow();
       } else {
         settingsCursor = 0;
