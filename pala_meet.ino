@@ -372,7 +372,9 @@ void loop() {
   if (state == STATE_IDLE) {
     ButtonEvent rec = readButtonEvent(BTN_REC);
     ButtonEvent pwr = readButtonEvent(BTN_PWR);
-    if (rec != EV_NONE || pwr != EV_NONE) {
+    if (rec == EV_LONG) {
+      startRecordFlow();
+    } else if (rec != EV_NONE || pwr != EV_NONE) {
       soundSelect();
       menuCursor = 0;
       state = STATE_MENU;
@@ -427,7 +429,9 @@ void loop() {
         state = STATE_SETTINGS;
         showSettings(settingsCursor);
       }
-    } else if (rec == EV_LONG || rec == EV_DOUBLE) {
+    } else if (rec == EV_LONG) {
+      startRecordFlow();
+    } else if (rec == EV_DOUBLE) {
       soundBack();
       state = STATE_IDLE;
       showIdle();
