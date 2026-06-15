@@ -298,9 +298,12 @@ static void handleApiHistoryDelete() {
         return;
     }
 
-    String fullPath = "/" + dir;
-    Serial.printf("[History] Deleting: %s\n", fullPath.c_str());
-    deleteDirRecursive(fullPath);
+    // Offload to processTask (20 KB stack) — same pattern as factory reset.
+    // deleteDirRecursive() on the 6 KB webTask stack can canary-crash when
+    // a meeting directory contains many chunk files.
+    pendingHistoryDeleteDir = "/" + dir;
+    needHistoryDelete = true;
+    Serial.printf("[History] Delete scheduled for processTask: %s\n", pendingHistoryDeleteDir.c_str());
     server.send(200, "application/json", "{\"ok\":true}");
 }
 

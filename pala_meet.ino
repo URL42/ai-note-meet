@@ -92,6 +92,8 @@ volatile bool processingFinal  = false;
 volatile bool needFactoryReset = false;
 volatile bool needWifiReconnect = false;
 volatile bool needApRestart    = false;
+volatile bool needHistoryDelete = false;
+String        pendingHistoryDeleteDir;
 
 String fullTranscript      = "";
 String rollingSummary      = "";
@@ -297,6 +299,28 @@ void loop() {
         && !meetIsRecording() && !meetIsProcessing()) {
       enterUltraSleep();
       return;
+    }
+  }
+
+  // WiFi credential change — reconnect using the newly saved credentials.
+  // Blocks up to 10 s; only fires after the user deliberately saves settings.
+  if (needWifiReconnect && !meetingActive) {
+    needWifiReconnect = false;
+    WiFi.disconnect();
+    delay(200);
+    WiFi.mode(WIFI_AP_STA);
+    WiFi.begin(wifiSSID.c_str(), wifiPass.c_str());
+    Serial.println("[WiFi] Reconnecting with updated credentials...");
+    int tries = 0;
+    while (WiFi.status() != WL_CONNECTED && tries < 20) {
+      delay(500); tries++;
+    }
+    if (WiFi.status() == WL_CONNECTED) {
+      Serial.println("[WiFi] Connected: " + WiFi.localIP().toString());
+      syncTimeFromNTP(6000);
+    } else {
+      Serial.println("[WiFi] STA connect failed — AP still active");
+      WiFi.mode(WIFI_AP);
     }
   }
 

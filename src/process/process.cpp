@@ -442,6 +442,22 @@ void processTask(void* pv) {
             ESP.restart();
         }
 
+        // ── 0b. Single-meeting delete from /api/history/delete ──────────────
+        // Offloaded here for the same reason as factory reset: this task has
+        // the 20 KB stack; webTask only has 6 KB and can canary-crash on a
+        // meeting directory with many chunk files.
+        if (needHistoryDelete) {
+            needHistoryDelete = false;
+            String target = pendingHistoryDeleteDir;
+            if (target.length() > 0 && target.startsWith("/meeting_")) {
+                Serial.printf("[History] Deleting: %s\n", target.c_str());
+                deleteDirRecursive(target);
+                Serial.printf("[History] Deleted: %s\n", target.c_str());
+            } else {
+                Serial.printf("[History] Delete skipped (bad path): '%s'\n", target.c_str());
+            }
+        }
+
         // ── 1. Pick up a ready chunk ────────────────────────────────────────
         // Block for up to 100 ms so the task yields instead of spin-polling.
         // xQueueReceive is thread-safe — no extra mutex needed.

@@ -128,8 +128,12 @@ void transcribeAll() {
   int done = 0;
   for (int i=0; i<(int)noteIndex.size(); i++) {
     if (noteIndex[i].hasText) continue;
-    showTranscribing(done, pending);
     char wp[64]; snprintf(wp, sizeof(wp), "%s/note_%03d.wav", NOTES_DIR, noteIndex[i].num);
+    if (!SD_MMC.exists(wp)) {
+      Serial.printf("[Sync] Note %d: WAV missing, skipping\n", noteIndex[i].num);
+      continue;
+    }
+    showTranscribing(done, pending);
     if (transcribe(String(wp), noteIndex[i].num)) done++;
   }
 }

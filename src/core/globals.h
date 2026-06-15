@@ -93,6 +93,12 @@ extern volatile bool processingFinal;
 // watchpoint on devices with many stored meetings.
 extern volatile bool needFactoryReset;
 
+// Set by /api/history/delete; consumed by processTask for the same reason.
+// pendingHistoryDeleteDir is written before the flag is set so processTask
+// always sees a valid path when it reads needHistoryDelete == true.
+extern volatile bool needHistoryDelete;
+extern String        pendingHistoryDeleteDir;
+
 extern String meetingDir;
 extern String fullTranscript;
 extern String finalTranscriptText; // full transcript snapshot saved before reset
