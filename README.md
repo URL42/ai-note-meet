@@ -118,16 +118,13 @@ All display updates after boot use fast-refresh mode (~3–5s).
 
 ### Button controls
 
-| Button | Action | Result |
-|--------|--------|--------|
-| REC (GPIO0) | Long press (>350ms) from idle | Start recording a voice note |
-| REC (GPIO0) | Short press | Confirm / advance in menus |
-| REC (GPIO0) | Double press | Back / cancel |
-| PWR (GPIO18) | Any press from idle | Open main menu |
-| PWR (GPIO18) | Short press in menu | Next menu item |
-| PWR (GPIO18) | Short press in submenu | Back / cancel |
+| From | Short REC | Long REC | Double REC | PWR |
+|------|-----------|----------|------------|-----|
+| Idle (screensaver) | Open menu | **Start recording** | Open menu | Open menu |
+| Menu | Select item | **Start recording** | Back to idle | Next item |
+| Submenus / lists | Confirm / select | Back | Back | Next item |
 
-The device enters deep sleep automatically after a configurable inactivity timeout. Press any button to wake.
+Long-pressing REC is a universal shortcut to start a voice note recording from anywhere in the top-level navigation. The device enters deep sleep automatically after an inactivity timeout; press any button to wake.
 
 ### Main menu
 
@@ -141,11 +138,11 @@ The device enters deep sleep automatically after a configurable inactivity timeo
 
 ### Recording a voice note
 
-1. From the idle screen, **long-press REC** to start recording.
-2. The display shows a waveform recording indicator.
-3. **Short-press REC** to stop. The WAV is saved to SD card.
+1. **Long-press REC** from the idle screen or the menu to start recording immediately.
+2. The display shows a recording indicator.
+3. **Short or long-press REC** to stop. The WAV is saved to SD card.
 4. Choose a tag with PWR (cycle) and confirm with REC. The device sleeps.
-5. Next time you press **Sync**, the WAV is sent to Whisper for transcription. The WAV is deleted after a successful transcription; the TXT transcript is kept.
+5. Next time you run **Sync**, the WAV is sent to Whisper for transcription. The WAV is deleted after a successful transcription; the TXT transcript is kept.
 
 ### Recording a meeting
 
