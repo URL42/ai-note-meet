@@ -43,6 +43,15 @@ epaper_driver_display::epaper_driver_display(int width, int height, custom_lcd_s
 
     assert(buffer);
     memset(buffer, 0xFF, alloc_len);  // start white
+
+    bufferLen = alloc_len;
+
+    // Snapshot for dirty-check in EPD_Display(). Inited to all-black so the
+    // first display after boot always fires regardless of buffer content.
+    lastBuffer = (uint8_t *)heap_caps_malloc(alloc_len, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!lastBuffer)
+        lastBuffer = (uint8_t *)heap_caps_malloc(alloc_len, MALLOC_CAP_8BIT);
+    if (lastBuffer) memset(lastBuffer, 0x00, alloc_len);
 }
 
 epaper_driver_display::~epaper_driver_display() {}
@@ -246,6 +255,12 @@ void epaper_driver_display::EPD_Display()
     const int total_1bpp = bpr_1bpp * Height;    // 5000 bytes
     const int total_2bpp = (Width / 4) * Height; // 10000 bytes
 
+    // Skip the 3-5 s panel refresh if the buffer hasn't changed since last display.
+    if (lastBuffer && memcmp(buffer, lastBuffer, total_1bpp) == 0) {
+        ESP_LOGI(TAG, "EPD_Display: buffer unchanged — skipping refresh");
+        return;
+    }
+
     uint8_t *buf2 = (uint8_t *)heap_caps_malloc(total_2bpp, MALLOC_CAP_8BIT);
 
     if (buf2) {
@@ -271,6 +286,9 @@ void epaper_driver_display::EPD_Display()
 
     EPD_SendCommand(0x12); EPD_SendData(0x00);  // DRF: display refresh
     read_busy_H();  // G display refresh takes ~14 seconds
+
+    // Snapshot the buffer so the next EPD_Display() can skip if unchanged.
+    if (lastBuffer) memcpy(lastBuffer, buffer, total_1bpp);
 }
 
 // ─── Single pixel draw ────────────────────────────────────────────────────────

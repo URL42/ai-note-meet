@@ -28,7 +28,9 @@ private:
     const int Width;
     const int Height;
     spi_device_handle_t spi;
-    uint8_t *buffer = NULL;
+    uint8_t *buffer     = NULL;
+    uint8_t *lastBuffer = NULL;  // snapshot of last-displayed buffer; dirty check in EPD_Display()
+    int      bufferLen  = 0;
 
     void spi_gpio_init();
     void spi_port_init();
