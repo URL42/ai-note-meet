@@ -246,11 +246,16 @@ void epaper_driver_display::EPD_Display()
     const int total_1bpp = bpr_1bpp * Height;    // 5000 bytes
     const int total_2bpp = (Width / 4) * Height; // 10000 bytes
 
-    // Skip the 3-5 s panel refresh if the buffer hasn't changed since last display.
+    // Skip the refresh if the buffer hasn't changed since last display.
     if (lastBuffer && memcmp(buffer, lastBuffer, total_1bpp) == 0) {
         ESP_LOGI(TAG, "EPD_Display: buffer unchanged — skipping refresh");
         return;
     }
+
+    // Wake panel from post-refresh power-off state.
+    // Register config is retained after POF so a simple PON is enough.
+    EPD_SendCommand(0x04);  // PON: power on
+    read_busy_H();
 
     uint8_t *buf2 = (uint8_t *)heap_caps_malloc(total_2bpp, MALLOC_CAP_8BIT);
 
@@ -276,7 +281,13 @@ void epaper_driver_display::EPD_Display()
     }
 
     EPD_SendCommand(0x12); EPD_SendData(0x00);  // DRF: display refresh
-    read_busy_H();  // G display refresh takes ~14 seconds
+    read_busy_H();
+
+    // Power off after every refresh. Leaving the panel drivers active long-term
+    // permanently damages the internal layer (per Waveshare 1.54G datasheet).
+    // EPD_Init_Fast() at the top of the next EPD_Display() wakes it again.
+    EPD_SendCommand(0x02);  // POF: power off
+    read_busy_H();
 
     // Snapshot the buffer so the next EPD_Display() can skip if unchanged.
     if (lastBuffer) memcpy(lastBuffer, buffer, total_1bpp);
