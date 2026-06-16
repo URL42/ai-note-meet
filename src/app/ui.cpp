@@ -277,7 +277,7 @@ void showBatteryLow(int pct) {
 void showRecording() {
   fillRect(0, 0, W, H, BLACK);
   fillCircle(W/2, H/2, 27, WHITE);
-  refreshFast();
+  refresh();
 }
 
 void showSaved(int num) {
@@ -331,7 +331,7 @@ void showMenu(int cursor) {
     thickLine(ax - 6, ay - 4, ax, ay + 4, 2, BLACK);
     thickLine(ax,     ay + 4, ax + 6, ay - 4, 2, BLACK);
   }
-  refreshFast();
+  refresh();
 }
 
 void showTagBrowser(int cursor) {
@@ -339,7 +339,7 @@ void showTagBrowser(int cursor) {
   if (tagCount <= 0) {
     drawKicker("tags", 16);
     drawStrC(100, 100, "no tags", 1, BLACK);
-    refreshFast();
+    refresh();
     return;
   }
   drawKicker("tags", 16);
@@ -351,7 +351,7 @@ void showTagBrowser(int cursor) {
     if (strcmp(noteIndex[i].tag, tags[cursor])==0) cnt++;
   char cb[20]; snprintf(cb, sizeof(cb), "%d notes", cnt);
   drawStrC(100, 130, cb, 1, BLACK);
-  refreshFast();
+  refresh();
 }
 
 void showNoteList(int cursor) {
@@ -369,7 +369,7 @@ void showNoteList(int cursor) {
   if (count <= 0) {
     drawMinimalDocIcon(100, 76, BLACK);
     drawStrC(100, 116, "no notes yet", 1, BLACK);
-    refreshFast();
+    refresh();
     return;
   }
   const int pageSize = 3;
@@ -382,7 +382,7 @@ void showNoteList(int cursor) {
     int idx = noteAtFilteredIndex(vis);
     if (idx >= 0) drawNoteCard(y0 + row*step, idx, row == activeRow);
   }
-  refreshFast();
+  refresh();
 }
 
 void showNoteDetail(int cursor) {
@@ -522,7 +522,7 @@ void showSettings(int cursor) {
       drawStr(28, y + 8, "device", 1, col);
     }
   }
-  refreshFast();
+  refresh();
 }
 
 void showDeviceInfo() {

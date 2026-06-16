@@ -120,7 +120,7 @@ int    tzOffsetMin   = 0;   // UTC; set in config.json
 // aiModel:    model name string for the chosen provider
 // localUrl:   base URL for local Ollama / LM Studio (e.g. "http://192.168.1.147:11434")
 String aiProvider    = "openai";
-String aiModel       = "gpt-4o-mini";
+String aiModel       = "gpt-5.4-mini";
 String anthropicKey  = "";
 String geminiKey     = "";
 String localUrl      = "http://192.168.1.147:11434";
@@ -163,16 +163,6 @@ void startRecordFlow() {
   showRecording();
 
   palaSoundSetEnabled(false);
-
-  // Push-to-talk: if button already released (e-paper refresh took too long,
-  // or called from menu after EV_LONG fires on release), wait for user to
-  // press-and-hold REC. record() then captures while held, stops on release.
-  if (digitalRead(BTN_REC) != LOW) {
-    uint32_t waitStart = millis();
-    while (digitalRead(BTN_REC) != LOW && millis() - waitStart < 5000) delay(5);
-    delay(20); // debounce
-  }
-
   bool recOk = record();
   palaSoundSetEnabled(true);
 
@@ -380,45 +370,41 @@ void loop() {
 
   // IDLE ─────────────────────────────────────────────────────────────────
   if (state == STATE_IDLE) {
-    // Eat the button that woke us from ultra-sleep so it doesn't immediately
-    // trigger recording again.
-    static bool idleDebounced = false;
-    if (!idleDebounced) {
-      idleDebounced = true;
-      delay(500);
-    }
+    // Release latch: don't accept REC until it's been seen HIGH (released).
+    // Prevents the GPIO0 boot/wake-button from immediately firing recording.
+    static bool recArmed = false;
+    static bool wasIdle  = false;
+    if (!wasIdle) { recArmed = false; wasIdle = true; }
 
-    // Inline hold detection so startRecordFlow() is called while REC is still
-    // physically held — record() then captures audio until release.
-    if (digitalRead(BTN_REC) == LOW) {
-      delay(20);
-      if (digitalRead(BTN_REC) == LOW) {
-        uint32_t t0 = millis();
-        while (digitalRead(BTN_REC) == LOW && millis() - t0 < BTN_LONG_MS) delay(3);
-        if (digitalRead(BTN_REC) == LOW) {
-          // Still held past threshold → push-to-talk recording
-          resetActivity();
-          startRecordFlow();
-          idleDebounced = false; // reset for next idle entry
-        } else {
-          // Short tap → menu
-          soundSelect();
-          menuCursor = 0;
-          state = STATE_MENU;
-          showMenu(menuCursor);
-          idleDebounced = false;
-        }
-      }
-    } else {
+    if (digitalRead(BTN_REC) == HIGH) recArmed = true;
+
+    if (recArmed) {
+      ButtonEvent rec = readButtonEvent(BTN_REC);
       ButtonEvent pwr = readButtonEvent(BTN_PWR);
-      if (pwr != EV_NONE) {
+      if (rec != EV_NONE) {
+        wasIdle = false;
+        soundSelect();
+        startRecordFlow();
+      } else if (pwr != EV_NONE) {
+        wasIdle = false;
         soundSelect();
         menuCursor = 0;
         state = STATE_MENU;
         showMenu(menuCursor);
-        idleDebounced = false;
+      }
+    } else {
+      // Not yet armed: still accept PWR (GPIO18 has no strapping-pin issue)
+      ButtonEvent pwr = readButtonEvent(BTN_PWR);
+      if (pwr != EV_NONE) {
+        wasIdle = false;
+        soundSelect();
+        menuCursor = 0;
+        state = STATE_MENU;
+        showMenu(menuCursor);
       }
     }
+
+    if (state != STATE_IDLE) wasIdle = false;
   }
 
   // TAG SELECT after recording ──────────────────────────────────────────

@@ -31,11 +31,9 @@ private:
     uint8_t *buffer     = NULL;
     uint8_t *lastBuffer = NULL;  // snapshot of last-displayed buffer; dirty check in EPD_Display()
     int      bufferLen  = 0;
-    bool     partialReady = false; // true after base image written + partial LUT loaded
 
     void spi_gpio_init();
     void spi_port_init();
-    void read_busy();    // wait BUSY LOW  (legacy, unused in G driver)
     void read_busy_H();  // wait BUSY HIGH (used after power-on and refresh)
 
     void set_cs_1(){gpio_set_level((gpio_num_t)lcd_spi_data.cs,1);}
@@ -50,34 +48,16 @@ private:
     void EPD_SendCommand(uint8_t command);
     void writeBytes(uint8_t *buffer, int len);
     void writeBytes(const uint8_t *buffer, int len);
-    // SSD1680-era stubs — no-ops on 4-color G display
-    void EPD_SetWindows(uint16_t, uint16_t, uint16_t, uint16_t);
-    void EPD_SetCursor(uint16_t, uint16_t);
-    void EPD_SetLut(const uint8_t *);
-    void EPD_TurnOnDisplay();
-    void EPD_TurnOnDisplayPart();
 
 public:
     epaper_driver_display(int width, int height,custom_lcd_spi_t _lcd_spi_data);
     ~epaper_driver_display();
 
     void EPD_Init();         // full-quality init (use once on boot)
-    void EPD_Init_Fast();    // fast-refresh init (call after first clear; ~3-5s vs ~14s)
+    void EPD_Init_Fast();    // fast-refresh init (~3-5s vs ~14s)
     void EPD_Clear();        // fill 1bpp buffer with white
-    void EPD_Display();      // full refresh — use for major screen transitions
+    void EPD_Display();      // full refresh; skips if buffer unchanged (dirty-flag)
 
-    // ── Experimental partial refresh (ported from pala_note SSD1681 driver) ──
-    // These send SSD1681 commands to the IC7/UC8151 G panel — may or may not work.
-    // EPD_DisplayFast(): first call sets base image + partial LUT (~3-5s once),
-    //                    subsequent calls do fast partial update (~300ms if it works).
-    // EPD_ResetPartial(): call before a major screen transition so the next
-    //                     EPD_DisplayFast() re-initialises the base image.
-    void EPD_DisplayFast();
-    void EPD_ResetPartial();
-
-    void EPD_DisplayPartBaseImage();
-    void EPD_Init_Partial();
-    void EPD_DisplayPart();
     void EPD_DrawColorPixel(uint16_t x, uint16_t y, uint8_t color);
 
     uint8_t* getBuffer()  { return buffer; }

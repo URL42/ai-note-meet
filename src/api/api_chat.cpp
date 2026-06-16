@@ -3,7 +3,7 @@
  * ─────────────────────────────────────────────────────────────────
  * Sends a user question to OpenAI GPT with the meeting summary
  * and (up to 3 KB of) transcript as grounding context.
- * Uses gpt-4o-mini for fast, affordable responses.
+ * Uses gpt-5.4-mini for fast, affordable responses.
  *
  * Resilience fixes:
  *   • Added http.setReuse(false) — prevents connection-state
@@ -29,12 +29,12 @@
 // With OPI PSRAM enabled (XIAO ESP32-S3 Sense = 8 MB PSRAM), we have
 // enormous headroom for the transcript buffer + HTTP body assembly.
 // 380 KB transcript covers ~12 hours of speech in one chat request.
-// gpt-4o-mini's input context (128 K tokens ≈ 500 KB) is the model
+// gpt-5.4-mini's input context (128 K tokens ≈ 500 KB) is the model
 // ceiling, and we sit just below it once prompt + JSON-escape are
 // added.  Long-form chat now has the same quality as the summary
 // path — no head/tail tricks, never truncates the meeting.
 #define CHAT_TRANSCRIPT_CTX  380000
-// 16 K tokens in the GPT reply — gpt-4o-mini's hard output cap.
+// 16 K tokens in the GPT reply — gpt-5.4-mini's hard output cap.
 #define CHAT_MAX_TOKENS      16000
 // Retry attempts for the HTTP POST
 #define CHAT_MAX_ATTEMPTS    3
@@ -198,8 +198,8 @@ String askAboutSummary(const String& question,
     }
 
     // ── 3. Build request body ──────────────────────────────────────
-    // gpt-4o-mini — fast + cheap for interactive chat.
-    String body = "{\"model\":\"gpt-4o-mini\",\"max_tokens\":" + String(CHAT_MAX_TOKENS) + ","
+    // gpt-5.4-mini — fast + cheap for interactive chat.
+    String body = "{\"model\":\"gpt-5.4-mini\",\"max_tokens\":" + String(CHAT_MAX_TOKENS) + ","
                   "\"temperature\":0.2,\"messages\":[";
     body += "{\"role\":\"system\",\"content\":\"" + jsonEscape(sys) + "\"}";
 

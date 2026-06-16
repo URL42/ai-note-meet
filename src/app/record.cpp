@@ -29,9 +29,23 @@ bool record() {
     f.close(); return false;
   }
 
-  uint32_t totalMono=0, t0=millis();
+  uint32_t totalMono=0;
+  uint32_t t0 = millis();
 
-  while (digitalRead(BTN_REC)==LOW || millis()-t0 < 500) {
+  // Toggle recording: runs until REC tap or REC_MAX_MS safety cap.
+  // Button is checked once per ~128ms chunk (resolution of audio_playback_read).
+  // A tap held for one chunk boundary (~128ms) is reliably detected.
+  while (millis() - t0 < REC_MAX_MS) {
+    // After 500ms warmup (prevents the start-tap from immediately stopping),
+    // a REC press stops recording.
+    if (millis() - t0 > 500 && digitalRead(BTN_REC) == LOW) {
+      delay(20);
+      if (digitalRead(BTN_REC) == LOW) {
+        while (digitalRead(BTN_REC) == LOW) delay(5);
+        break;
+      }
+    }
+
     audio_playback_read((void*)sbuf, REC_BUF);
     int mono = REC_BUF/4;
     for (int i=0;i<mono;i++) mbuf[i] = sbuf[i*2];
