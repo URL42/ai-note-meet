@@ -26,7 +26,9 @@ void strokeRoundRect(int x, int y, int w, int h, int r, int t, uint8_t c);
 void drawBitmap1BPP(int x0, int y0, const uint8_t* bits, int bw, int bh, uint8_t color);
 
 void clearWhite();
-void refresh();
+void refresh();          // full refresh — resets partial mode
+void refreshFast();      // experimental: partial refresh for navigation screens
+void resetPartialMode(); // call before major screen transitions
 
 void drawBigDigit(int x, int y, int w, int h, char d, uint8_t c);
 int  bigStrW(int h, const char* s);

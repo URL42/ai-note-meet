@@ -309,16 +309,161 @@ void epaper_driver_display::EPD_DrawColorPixel(uint16_t x, uint16_t y, uint8_t c
         buffer[index] &= ~(0x01 << bit);
 }
 
-// ─── Stub: partial refresh not supported on 4-color G display ────────────────
+// ─── Experimental partial refresh ────────────────────────────────────────────
+//
+// Commands ported verbatim from the pala_note SSD1681 driver.
+// The G panel uses an IC7/UC8151-family controller with different commands,
+// so this may produce garbage, nothing, or — if we're lucky — fast updates.
+// Worst case: power-cycle the board.  No permanent damage possible.
+//
+// How it works on SSD1681 (and hopefully here):
+//   EPD_DisplayPartBaseImage() — writes the current frame to BOTH the "new"
+//     buffer (0x24) and the "old" buffer (0x26).  The controller compares
+//     these two when doing a partial update; having them identical at this
+//     point means the first fast refresh correctly starts from the current screen.
+//   EPD_Init_Partial() — loads the partial waveform LUT (much shorter pulse
+//     sequence than full refresh → ~300 ms instead of 3-5 s).
+//   EPD_DisplayPart() — writes the new frame to 0x24 and triggers the partial
+//     update.  Only pixels that differ between 0x24 and 0x26 are refreshed.
+// ─────────────────────────────────────────────────────────────────────────────
 
-void epaper_driver_display::EPD_DisplayPartBaseImage() { EPD_Display(); }
-void epaper_driver_display::EPD_Init_Partial()          {}
-void epaper_driver_display::EPD_DisplayPart()           { EPD_Display(); }
+// Partial waveform LUT — 159 bytes, ported from pala_note (WF_PARTIAL_1IN54_0).
+// Short pulse sequence: drives changed pixels in one pass, leaving others alone.
+static const uint8_t WF_PARTIAL[159] = {
+    0x0,0x40,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,
+    0x80,0x80,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,
+    0x40,0x40,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,
+    0x0,0x80,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,
+    0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,
+    0xF,0x0,0x0,0x0,0x0,0x0,0x0,
+    0x1,0x1,0x0,0x0,0x0,0x0,0x0,
+    0x0,0x0,0x0,0x0,0x0,0x0,0x0,
+    0x0,0x0,0x0,0x0,0x0,0x0,0x0,
+    0x0,0x0,0x0,0x0,0x0,0x0,0x0,
+    0x0,0x0,0x0,0x0,0x0,0x0,0x0,
+    0x0,0x0,0x0,0x0,0x0,0x0,0x0,
+    0x0,0x0,0x0,0x0,0x0,0x0,0x0,
+    0x0,0x0,0x0,0x0,0x0,0x0,0x0,
+    0x0,0x0,0x0,0x0,0x0,0x0,0x0,
+    0x0,0x0,0x0,0x0,0x0,0x0,0x0,
+    0x0,0x0,0x0,0x0,0x0,0x0,0x0,
+    0x22,0x22,0x22,0x22,0x22,0x22,0x0,0x0,0x0,
+    0x02,0x17,0x41,0xB0,0x32,0x28,
+};
 
-// ─── Unused SSD1680-era helpers (no-ops, kept for linker compat) ─────────────
+void epaper_driver_display::EPD_SetWindows(uint16_t Xstart, uint16_t Ystart,
+                                            uint16_t Xend,   uint16_t Yend)
+{
+    EPD_SendCommand(0x44);
+    EPD_SendData((Xstart >> 3) & 0xFF);
+    EPD_SendData((Xend   >> 3) & 0xFF);
+    EPD_SendCommand(0x45);
+    EPD_SendData(Ystart & 0xFF);
+    EPD_SendData((Ystart >> 8) & 0xFF);
+    EPD_SendData(Yend   & 0xFF);
+    EPD_SendData((Yend   >> 8) & 0xFF);
+}
 
-void epaper_driver_display::EPD_SetWindows(uint16_t, uint16_t, uint16_t, uint16_t) {}
-void epaper_driver_display::EPD_SetCursor(uint16_t, uint16_t) {}
-void epaper_driver_display::EPD_SetLut(const uint8_t *) {}
-void epaper_driver_display::EPD_TurnOnDisplay() {}
-void epaper_driver_display::EPD_TurnOnDisplayPart() {}
+void epaper_driver_display::EPD_SetCursor(uint16_t Xstart, uint16_t Ystart)
+{
+    EPD_SendCommand(0x4E);
+    EPD_SendData(Xstart & 0xFF);
+    EPD_SendCommand(0x4F);
+    EPD_SendData(Ystart & 0xFF);
+    EPD_SendData((Ystart >> 8) & 0xFF);
+}
+
+void epaper_driver_display::EPD_SetLut(const uint8_t *lut)
+{
+    EPD_SendCommand(0x32);
+    writeBytes(lut, 153);
+    read_busy();
+
+    EPD_SendCommand(0x3f); EPD_SendData(lut[153]);
+    EPD_SendCommand(0x03); EPD_SendData(lut[154]);
+    EPD_SendCommand(0x04); EPD_SendData(lut[155]); EPD_SendData(lut[156]); EPD_SendData(lut[157]);
+    EPD_SendCommand(0x2c); EPD_SendData(lut[158]);
+}
+
+void epaper_driver_display::EPD_TurnOnDisplay()
+{
+    EPD_SendCommand(0x22); EPD_SendData(0xc7);
+    EPD_SendCommand(0x20);
+    read_busy();
+}
+
+void epaper_driver_display::EPD_TurnOnDisplayPart()
+{
+    EPD_SendCommand(0x22); EPD_SendData(0xcf);
+    EPD_SendCommand(0x20);
+    read_busy();
+}
+
+void epaper_driver_display::EPD_DisplayPartBaseImage()
+{
+    const int len = ((Width + 7) / 8) * Height;  // 5000 bytes, 1bpp
+    EPD_SendCommand(0x24);
+    writeBytes(buffer, len);
+    EPD_SendCommand(0x26);
+    writeBytes(buffer, len);
+    EPD_TurnOnDisplay();
+}
+
+void epaper_driver_display::EPD_Init_Partial()
+{
+    // Hardware reset to pick up the new LUT
+    set_rst_1(); vTaskDelay(pdMS_TO_TICKS(50));
+    set_rst_0(); vTaskDelay(pdMS_TO_TICKS(20));
+    set_rst_1(); vTaskDelay(pdMS_TO_TICKS(50));
+    read_busy();
+
+    EPD_SetLut(WF_PARTIAL);
+
+    // Keep VCOM border active during partial updates
+    EPD_SendCommand(0x37);
+    for (int i = 0; i < 9; i++) EPD_SendData(i == 5 ? 0x40 : 0x00);
+
+    EPD_SendCommand(0x3C); EPD_SendData(0x80);
+
+    EPD_SendCommand(0x22); EPD_SendData(0xc0);
+    EPD_SendCommand(0x20);
+    read_busy();
+
+    EPD_SetWindows(0, 0, Width - 1, Height - 1);
+    EPD_SetCursor(0, 0);
+}
+
+void epaper_driver_display::EPD_DisplayPart()
+{
+    const int len = ((Width + 7) / 8) * Height;
+    EPD_SendCommand(0x24);
+    writeBytes(buffer, len);
+    EPD_TurnOnDisplayPart();
+}
+
+// ─── EPD_DisplayFast / EPD_ResetPartial (public API) ─────────────────────────
+
+void epaper_driver_display::EPD_DisplayFast()
+{
+    if (!partialReady) {
+        // First call after a full refresh: set base image + load partial LUT.
+        // This still takes ~3-5s but only happens once per stable screen.
+        ESP_LOGI(TAG, "EPD_DisplayFast: initialising partial mode");
+        EPD_DisplayPartBaseImage();
+        EPD_Init_Partial();
+        partialReady = true;
+    } else {
+        // Subsequent calls: fast partial update (~300ms if the panel responds).
+        if (lastBuffer && memcmp(buffer, lastBuffer, ((Width+7)/8)*Height) == 0) {
+            ESP_LOGI(TAG, "EPD_DisplayFast: buffer unchanged — skipping");
+            return;
+        }
+        EPD_DisplayPart();
+        if (lastBuffer) memcpy(lastBuffer, buffer, ((Width+7)/8)*Height);
+    }
+}
+
+void epaper_driver_display::EPD_ResetPartial()
+{
+    partialReady = false;
+}

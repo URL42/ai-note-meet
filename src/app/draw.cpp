@@ -141,8 +141,10 @@ void drawBitmap1BPP(int x0, int y0, const uint8_t* bits, int bw, int bh, uint8_t
   }
 }
 
-void clearWhite() { display->EPD_Clear(); }
-void refresh()    { display->EPD_Display(); }
+void clearWhite()       { display->EPD_Clear(); }
+void refresh()          { display->EPD_Display(); display->EPD_ResetPartial(); }
+void refreshFast()      { display->EPD_DisplayFast(); }
+void resetPartialMode() { display->EPD_ResetPartial(); }
 
 // ─── Large digit renderer ──────────────────────────────────────────────────
 

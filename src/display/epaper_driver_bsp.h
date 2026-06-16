@@ -31,6 +31,7 @@ private:
     uint8_t *buffer     = NULL;
     uint8_t *lastBuffer = NULL;  // snapshot of last-displayed buffer; dirty check in EPD_Display()
     int      bufferLen  = 0;
+    bool     partialReady = false; // true after base image written + partial LUT loaded
 
     void spi_gpio_init();
     void spi_port_init();
@@ -63,9 +64,17 @@ public:
     void EPD_Init();         // full-quality init (use once on boot)
     void EPD_Init_Fast();    // fast-refresh init (call after first clear; ~3-5s vs ~14s)
     void EPD_Clear();        // fill 1bpp buffer with white
-    void EPD_Display();      // push buffer to panel and trigger refresh
+    void EPD_Display();      // full refresh — use for major screen transitions
 
-    /*局部刷新*/
+    // ── Experimental partial refresh (ported from pala_note SSD1681 driver) ──
+    // These send SSD1681 commands to the IC7/UC8151 G panel — may or may not work.
+    // EPD_DisplayFast(): first call sets base image + partial LUT (~3-5s once),
+    //                    subsequent calls do fast partial update (~300ms if it works).
+    // EPD_ResetPartial(): call before a major screen transition so the next
+    //                     EPD_DisplayFast() re-initialises the base image.
+    void EPD_DisplayFast();
+    void EPD_ResetPartial();
+
     void EPD_DisplayPartBaseImage();
     void EPD_Init_Partial();
     void EPD_DisplayPart();
