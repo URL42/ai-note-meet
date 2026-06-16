@@ -163,6 +163,16 @@ void startRecordFlow() {
   showRecording();
 
   palaSoundSetEnabled(false);
+
+  // Push-to-talk: if button already released (e-paper refresh took too long,
+  // or called from menu after EV_LONG fires on release), wait for user to
+  // press-and-hold REC. record() then captures while held, stops on release.
+  if (digitalRead(BTN_REC) != LOW) {
+    uint32_t waitStart = millis();
+    while (digitalRead(BTN_REC) != LOW && millis() - waitStart < 5000) delay(5);
+    delay(20); // debounce
+  }
+
   bool recOk = record();
   palaSoundSetEnabled(true);
 
@@ -370,15 +380,44 @@ void loop() {
 
   // IDLE ─────────────────────────────────────────────────────────────────
   if (state == STATE_IDLE) {
-    ButtonEvent rec = readButtonEvent(BTN_REC);
-    ButtonEvent pwr = readButtonEvent(BTN_PWR);
-    if (rec == EV_LONG) {
-      startRecordFlow();
-    } else if (rec != EV_NONE || pwr != EV_NONE) {
-      soundSelect();
-      menuCursor = 0;
-      state = STATE_MENU;
-      showMenu(menuCursor);
+    // Eat the button that woke us from ultra-sleep so it doesn't immediately
+    // trigger recording again.
+    static bool idleDebounced = false;
+    if (!idleDebounced) {
+      idleDebounced = true;
+      delay(500);
+    }
+
+    // Inline hold detection so startRecordFlow() is called while REC is still
+    // physically held — record() then captures audio until release.
+    if (digitalRead(BTN_REC) == LOW) {
+      delay(20);
+      if (digitalRead(BTN_REC) == LOW) {
+        uint32_t t0 = millis();
+        while (digitalRead(BTN_REC) == LOW && millis() - t0 < BTN_LONG_MS) delay(3);
+        if (digitalRead(BTN_REC) == LOW) {
+          // Still held past threshold → push-to-talk recording
+          resetActivity();
+          startRecordFlow();
+          idleDebounced = false; // reset for next idle entry
+        } else {
+          // Short tap → menu
+          soundSelect();
+          menuCursor = 0;
+          state = STATE_MENU;
+          showMenu(menuCursor);
+          idleDebounced = false;
+        }
+      }
+    } else {
+      ButtonEvent pwr = readButtonEvent(BTN_PWR);
+      if (pwr != EV_NONE) {
+        soundSelect();
+        menuCursor = 0;
+        state = STATE_MENU;
+        showMenu(menuCursor);
+        idleDebounced = false;
+      }
     }
   }
 
@@ -390,7 +429,8 @@ void loop() {
     if (rec == EV_SINGLE || rec == EV_LONG) {
       soundSelect();
       saveTag(lastRecNum, tags[constrain(tagCursor, 0, max(tagCount - 1, 0))]);
-      enterUltraSleep();
+      state = STATE_IDLE;
+      showIdle();
     } else if (pwr == EV_SINGLE) {
       soundNext();
       if (tagCount > 0) tagCursor = (tagCursor + 1) % tagCount;

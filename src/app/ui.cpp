@@ -277,7 +277,7 @@ void showBatteryLow(int pct) {
 void showRecording() {
   fillRect(0, 0, W, H, BLACK);
   fillCircle(W/2, H/2, 27, WHITE);
-  refresh();
+  refreshFast();
 }
 
 void showSaved(int num) {
