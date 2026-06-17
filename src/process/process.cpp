@@ -494,6 +494,13 @@ void processTask(void* pv) {
                 File tf = SD_MMC.open(txtPath.c_str(), FILE_WRITE);
                 if (tf) { tf.println(transcript); tf.close(); }
 
+                // WAV chunk served its purpose — delete it now that the
+                // transcript is saved. full_transcript.md is the source
+                // of truth; keeping the WAVs would fill the card fast
+                // (~480 KB per 15s chunk = ~112 MB/hour).
+                SD_MMC.remove(path.c_str());
+                Serial.printf("[ProcessTask] Deleted WAV: %s\n", path.c_str());
+
                 bool hasContent = transcript.length() > 3
                                && !transcript.startsWith("[STT failed")
                                && !transcript.startsWith("[no speech");
