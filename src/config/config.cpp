@@ -38,7 +38,7 @@ bool loadConfig() {
     apPass       = doc["ap_pass"]      | AP_PASS_DEFAULT;
     tzOffsetMin  = doc["tz_min"]       | 0;
     aiProvider   = doc["ai_provider"]  | "openai";
-    aiModel      = doc["ai_model"]     | "gpt-5.4-mini";
+    aiModel      = doc["ai_model"]     | "gpt-4o-mini";
     anthropicKey = doc["anthropic_key"]| "";
     geminiKey    = doc["gemini_key"]   | "";
     localUrl     = doc["local_url"]    | "http://192.168.1.147:11434";

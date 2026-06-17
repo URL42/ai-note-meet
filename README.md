@@ -45,7 +45,7 @@ Configurable at runtime via the web dashboard or `config.json` on the SD card â€
 
 | Provider   | Models (examples)                                          |
 |------------|------------------------------------------------------------|
-| OpenAI     | `gpt-5.4-mini` (default), `gpt-4o`, `gpt-4o-mini`         |
+| OpenAI     | `gpt-4o-mini` (default), `gpt-4o`, `gpt-4o-mini`         |
 | Anthropic  | `claude-opus-4-8`, `claude-sonnet-4-6`, `claude-haiku-4-5` |
 | Google     | `gemini-1.5-pro`                                           |
 | Ollama     | any locally-served model                                   |
@@ -98,7 +98,7 @@ Format the SD card as FAT32. Create `config.json` in the root:
   "openai_key": "sk-...",
   "el_key": "your-elevenlabs-key",
   "ai_provider": "openai",
-  "ai_model": "gpt-5.4-mini",
+  "ai_model": "gpt-4o-mini",
   "tags": ["Note", "Work", "Meeting", "Buy", "Private"]
 }
 ```

@@ -525,7 +525,7 @@ body{height:100%;height:100dvh;overflow:hidden;-webkit-overflow-scrolling:touch;
       </div>
       <div style="font-size:11px;color:var(--t2);padding:4px 0 0 0">
         <strong>Model suggestions:</strong><br>
-        OpenAI: gpt-5.4-mini &nbsp;·&nbsp; gpt-4o &nbsp;·&nbsp; gpt-4o-mini<br>
+        OpenAI: gpt-4o-mini &nbsp;·&nbsp; gpt-4o &nbsp;·&nbsp; gpt-4.1-mini<br>
         Anthropic: claude-opus-4-8 &nbsp;·&nbsp; claude-sonnet-4-6 &nbsp;·&nbsp; claude-haiku-4-5<br>
         Gemini: gemini-2.5-pro &nbsp;·&nbsp; gemini-2.0-flash<br>
         Local: llama3.2 &nbsp;·&nbsp; mistral &nbsp;·&nbsp; qwen2.5

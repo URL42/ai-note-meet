@@ -800,7 +800,7 @@ void processTask(void* pv) {
                     Serial.println("[ProcessTask] Final summary invalid — using rolling summary.");
                     finalSummaryText = rollingSummary.length() > 60
                         ? rollingSummary
-                        : "Meeting recorded but summary failed. Check your OpenAI API key.";
+                        : "Meeting recorded but summary failed. Check your API key and model name in Settings, then use the Retry button.";
                 }
                 finalSummarySnap = finalSummaryText;
                 xSemaphoreGive(stateMutex);

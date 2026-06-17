@@ -122,7 +122,7 @@ int  configDefaultTagCount = 0;
 // aiModel:    model name string for the chosen provider
 // localUrl:   base URL for local Ollama / LM Studio (e.g. "http://192.168.1.147:11434")
 String aiProvider    = "openai";
-String aiModel       = "gpt-5.4-mini";
+String aiModel       = "gpt-4o-mini";
 String anthropicKey  = "";
 String geminiKey     = "";
 String localUrl      = "http://192.168.1.147:11434";
