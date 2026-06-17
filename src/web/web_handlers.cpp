@@ -364,6 +364,44 @@ static void handleApiHistoryRegenerate() {
     server.send(200, "application/json", resp);
 }
 
+// ─── POST /api/summary/regenerate ────────────────────────────────────────────
+// Re-run GPT on the current meeting's full_transcript.md.
+// Only valid after the meeting has ended (meetingActive must be false).
+static void handleApiSummaryRegenerate() {
+    server.sendHeader("Access-Control-Allow-Origin",  "*");
+    server.sendHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
+    server.sendHeader("Cache-Control", "no-cache");
+
+    if (meetingActive || processingFinal) {
+        server.send(409, "application/json",
+                    "{\"ok\":false,\"error\":\"meeting still in progress\"}");
+        return;
+    }
+
+    if (meetingDir.isEmpty() || !meetingDir.startsWith("/meeting_")) {
+        server.send(400, "application/json",
+                    "{\"ok\":false,\"error\":\"no meeting on record\"}");
+        return;
+    }
+
+    Serial.printf("[Web] Regenerating summary for current meeting: %s\n", meetingDir.c_str());
+    String newSum = regenerateSummaryForMeeting(meetingDir);
+
+    if (newSum.length() < 80) {
+        server.send(500, "application/json",
+                    "{\"ok\":false,\"error\":\"regeneration failed — check API key and network\"}");
+        return;
+    }
+
+    // Update the in-RAM summary so the next /api/status poll delivers the new text.
+    xSemaphoreTake(stateMutex, portMAX_DELAY);
+    finalSummaryText = newSum;
+    xSemaphoreGive(stateMutex);
+
+    String resp = "{\"ok\":true,\"summary\":\"" + jsonEscape(newSum) + "\"}";
+    server.send(200, "application/json", resp);
+}
+
 // ─── POST /api/factory-reset ─────────────────────────────────────────────────
 // Sets a flag for processTask (which has the 20 KB stack we need for
 // recursively walking and deleting every meeting directory) and returns
@@ -501,6 +539,7 @@ void startWebServer() {
     server.on("/api/history",            HTTP_GET,  handleApiHistory);
     server.on("/api/history/delete",     HTTP_POST, handleApiHistoryDelete);
     server.on("/api/history/regenerate", HTTP_POST, handleApiHistoryRegenerate);
+    server.on("/api/summary/regenerate", HTTP_POST, handleApiSummaryRegenerate);
     server.on("/api/factory-reset",      HTTP_POST, handleApiFactoryReset);
     server.on("/api/reset-credentials",  HTTP_POST, handleApiResetCredentials);
     server.on("/api/wifi/scan",          HTTP_GET,  handleApiWifiScan);

@@ -17,7 +17,6 @@ extern "C" {
 #include "src/power/board_power_bsp.h"
 #include "src/display/epaper_driver_bsp.h"
 #include "logo_bitmap.h"
-#include "secrets.h"
 #include "sounds.h"
 
 #include <Adafruit_GFX.h>
@@ -115,6 +114,9 @@ String apSSID        = "";
 String apPass        = "";
 int    tzOffsetMin   = 0;   // UTC; set in config.json
 
+char configDefaultTags[CONFIG_MAX_DEFAULT_TAGS][32] = {};
+int  configDefaultTagCount = 0;
+
 // ─── AI provider / model config ───────────────────────────────────────────────
 // aiProvider: "openai" | "anthropic" | "gemini" | "local"
 // aiModel:    model name string for the chosen provider
@@ -189,7 +191,7 @@ void startSyncFlow() {
   const int MAX_TRIES = 20;
   showWifiConnecting(0, MAX_TRIES);
 
-  WiFi.begin(WIFI_SSID, WIFI_PASS);
+  WiFi.begin(wifiSSID.c_str(), wifiPass.c_str());
   int tries = 0;
   while (WiFi.status() != WL_CONNECTED && tries < MAX_TRIES) {
     delay(500); tries++;

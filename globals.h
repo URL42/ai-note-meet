@@ -43,5 +43,12 @@ extern uint32_t  batWarnShowUntilMs;
 extern char      tags[20][32];
 extern int       tagCount;
 
+// Default tags loaded from config.json; used by createDefaultTags() when tags.txt is absent.
+#ifndef CONFIG_MAX_DEFAULT_TAGS
+#define CONFIG_MAX_DEFAULT_TAGS 20
+#endif
+extern char configDefaultTags[CONFIG_MAX_DEFAULT_TAGS][32];
+extern int  configDefaultTagCount;
+
 extern board_power_bsp_t      board;
 extern epaper_driver_display* display;

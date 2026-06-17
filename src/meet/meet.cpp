@@ -75,6 +75,10 @@ void meetSetup() {
     startWebServer();
 
     // Start background tasks
+    // recordTask: Core 0 — audio capture, doesn't compete with WiFi/TLS on Core 1
+    // processTask: Core 1 — STT + GPT HTTP calls need the network stack
+    // webTask: Core 1 — serves the dashboard
+    xTaskCreatePinnedToCore(recordTask,  "record",  8192,  NULL, 2, &recordTaskHandle,  0);
     xTaskCreatePinnedToCore(processTask, "process", 20480, NULL, 1, &processTaskHandle, 1);
     xTaskCreatePinnedToCore(webTask,     "web",      6144, NULL, 3, &webTaskHandle,     1);
 
@@ -84,6 +88,7 @@ void meetSetup() {
 void meetStart() {
     if (meetingActive) return;
     setCpuFrequencyMhz(240);
+    chunkIndex  = 0;   // reset so chunk filenames start at chunk_0 each meeting
     createMeetingDir();
     meetingActive = true;
     finalStop     = false;

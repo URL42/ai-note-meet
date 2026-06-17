@@ -11,6 +11,7 @@
 #include "FS.h"
 #include "SD_MMC.h"
 #include "../json/ShubhJson.h"
+#include <string.h>
 
 // ─── loadConfig ───────────────────────────────────────────────────────────────
 bool loadConfig() {
@@ -42,8 +43,20 @@ bool loadConfig() {
     geminiKey    = doc["gemini_key"]   | "";
     localUrl     = doc["local_url"]    | "http://192.168.1.147:11434";
 
-    Serial.printf("[Config] Loaded — SSID: %s  Provider: %s  Model: %s\n",
-        wifiSSID.c_str(), aiProvider.c_str(), aiModel.c_str());
+    // Load default tags array if present
+    configDefaultTagCount = 0;
+    JsonArray tagsArr = doc["tags"].as<JsonArray>();
+    for (JsonVariant v : tagsArr) {
+        if (configDefaultTagCount >= CONFIG_MAX_DEFAULT_TAGS) break;
+        String t = v.as<String>(); t.trim();
+        if (t.length() == 0 || t.length() > 31) continue;
+        strncpy(configDefaultTags[configDefaultTagCount], t.c_str(), 31);
+        configDefaultTags[configDefaultTagCount][31] = 0;
+        configDefaultTagCount++;
+    }
+
+    Serial.printf("[Config] Loaded — SSID: %s  Provider: %s  Model: %s  Tags: %d\n",
+        wifiSSID.c_str(), aiProvider.c_str(), aiModel.c_str(), configDefaultTagCount);
 
     return wifiSSID.length() > 0;
 }
@@ -69,6 +82,12 @@ void saveConfig() {
     doc["anthropic_key"] = anthropicKey;
     doc["gemini_key"]    = geminiKey;
     doc["local_url"]     = localUrl;
+
+    if (configDefaultTagCount > 0) {
+        JsonArray tagsArr = doc["tags"].to<JsonArray>();
+        for (int i = 0; i < configDefaultTagCount; i++)
+            tagsArr.add(String(configDefaultTags[i]));
+    }
 
     serializeJson(doc, f);
     f.close();

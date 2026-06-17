@@ -1,6 +1,7 @@
 #include "Arduino.h"
 #include "../../config.h"
 #include "../../globals.h"
+#include "../core/globals.h"
 #include "../../types.h"
 #include "network.h"
 #include "notes.h"
@@ -10,7 +11,6 @@
 #include "WiFiClientSecure.h"
 #include <WebServer.h>
 #include "SD_MMC.h"
-#include "../../secrets.h"
 
 // Main server on port 80 — declared in pala_meet.ino, externed in src/core/globals.h
 extern WebServer server;
@@ -64,7 +64,7 @@ static bool transcribeOnce(const String& wavPath, int noteNum) {
                 "Content-Type: multipart/form-data; boundary=%s\r\n"
                 "Content-Length: %u\r\n"
                 "Connection: close\r\n\r\n",
-                OPENAI_KEY, bnd.c_str(), (unsigned)totalLen);
+                openaiApiKey.c_str(), bnd.c_str(), (unsigned)totalLen);
   client.print(pre);
 
   uint8_t* chunk = (uint8_t*)heap_caps_malloc(4096, MALLOC_CAP_8BIT);

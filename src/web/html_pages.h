@@ -410,6 +410,7 @@ body{height:100%;height:100dvh;overflow:hidden;-webkit-overflow-scrolling:touch;
     <div class="tab-head">
       <span class="tab-title">Meeting Summary</span>
       <div class="tab-acts">
+        <button class="btn btn-s btn-sm" id="regenSumBtn" onclick="regenSummary()" title="Re-run AI summary from saved transcript"><svg style="width:12px;height:12px;vertical-align:middle;display:inline-block;flex-shrink:0" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><path d="M2.5 8a5.5 5.5 0 019.4-3.9"/><polyline points="12 2 12 5 9 5"/><path d="M13.5 8a5.5 5.5 0 01-9.4 3.9"/><polyline points="4 14 4 11 7 11"/></svg> Retry</button>
         <button class="btn btn-s btn-sm" id="dlBtn" style="display:none" onclick="dlSummary()"><svg style="width:12px;height:12px;vertical-align:middle;display:inline-block;flex-shrink:0" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><path d="M8 2.5v8M5.5 8l2.5 2.5 2.5-2.5"/><path d="M3 13.5h10"/></svg> Download</button>
         <button class="btn btn-s btn-sm" onclick="copySum()"><svg style="width:12px;height:12px;vertical-align:middle;display:inline-block;flex-shrink:0" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><rect x="9" y="2" width="5" height="5" rx="1"/><path d="M7 5H3.5A1.5 1.5 0 002 6.5v7A1.5 1.5 0 003.5 15h7A1.5 1.5 0 0012 13.5V10"/></svg> Copy</button>
       </div>
@@ -1072,6 +1073,32 @@ async function regenMeeting(i){
   }catch(e){
     if(card) card.style.opacity='1';
     toast('Connection error during regenerate','err');
+  }
+}
+
+async function regenSummary(){
+  var btn=document.getElementById('regenSumBtn');
+  if(btn){btn.disabled=true;btn.textContent='Retrying…';}
+  toast('Re-running AI summary… this may take a minute','info');
+  try{
+    var r=await fetch('/api/summary/regenerate',{method:'POST'});
+    var data;
+    try{data=await r.json();}catch(je){data={ok:r.ok};}
+    if(data.ok&&data.summary){
+      summaryReady=false;
+      var rendered=renderMd(data.summary);
+      document.getElementById('sumFinal').innerHTML=rendered||data.summary;
+      summaryReady=true;
+      var dlBtn=document.getElementById('dlBtn');
+      if(dlBtn) dlBtn.style.display='';
+      toast('Summary updated','ok');
+    } else {
+      toast('Retry failed: '+(data.error||'check API key and network'),'err');
+    }
+  }catch(e){
+    toast('Connection error during retry','err');
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='Retry';}
   }
 }
 

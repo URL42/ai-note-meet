@@ -522,6 +522,8 @@ void showSettings(int cursor) {
       drawStr(28, y + 8, "device", 1, col);
     }
   }
+  hline(0, 179, W, BLACK);
+  drawStr(8, 186, "back: dbl-click", 1, BLACK);
   refresh();
 }
 
@@ -549,7 +551,6 @@ void showMeetingIdle() {
   hline(16, 90, W - 32, BLACK);
   drawStr(16, 108, "Hold REC to start", 1, BLACK);
   drawStr(16, 128, "notemeet.local", 1, BLACK);
-  iconMicWhite(150, 100);
   refresh();
 }
 

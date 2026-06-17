@@ -76,6 +76,15 @@ extern String wifiPass;
 extern String elApiKey;
 extern String openaiApiKey;
 
+// ─── Default tags from config.json ────────────────────────────────────────────
+// Populated by loadConfig(). Used by createDefaultTags() when tags.txt is missing.
+// Empty = fall back to hardcoded DEFAULT_TAGS in types.h.
+#ifndef CONFIG_MAX_DEFAULT_TAGS
+#define CONFIG_MAX_DEFAULT_TAGS 20
+#endif
+extern char configDefaultTags[CONFIG_MAX_DEFAULT_TAGS][32];
+extern int  configDefaultTagCount;
+
 // ─── Meeting state ────────────────────────────────────────────────────────────
 extern volatile bool meetingActive;
 extern volatile bool finalStop;

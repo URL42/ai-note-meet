@@ -105,10 +105,19 @@ void saveTagsToFile() {
 
 void createDefaultTags() {
   tagCount = 0;
-  for (int i = 0; i < DEFAULT_TAG_COUNT && tagCount < MAX_TAGS; i++) {
-    strncpy(tags[tagCount], DEFAULT_TAGS[i], 31);
-    tags[tagCount][31] = 0;
-    tagCount++;
+  // Prefer tags defined in config.json; fall back to compile-time defaults.
+  if (configDefaultTagCount > 0) {
+    for (int i = 0; i < configDefaultTagCount && tagCount < MAX_TAGS; i++) {
+      strncpy(tags[tagCount], configDefaultTags[i], 31);
+      tags[tagCount][31] = 0;
+      tagCount++;
+    }
+  } else {
+    for (int i = 0; i < DEFAULT_TAG_COUNT && tagCount < MAX_TAGS; i++) {
+      strncpy(tags[tagCount], DEFAULT_TAGS[i], 31);
+      tags[tagCount][31] = 0;
+      tagCount++;
+    }
   }
   saveTagsToFile();
 }
