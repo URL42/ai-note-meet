@@ -176,7 +176,7 @@ static String _buildOpenAIBody(const String& sys, const String& user,
     body += jsonEscape(sys);
     body += "\"},{\"role\":\"user\",\"content\":\"";
     body += jsonEscape(user);
-    body += "\"}],\"temperature\":0.2,\"max_tokens\":";
+    body += "\"}],\"temperature\":0.2,\"max_completion_tokens\":";
     body += String(maxTokens);
     body += "}";
     return body;
@@ -189,7 +189,7 @@ static String _buildAnthropicBody(const String& sys, const String& user,
     body.reserve((sys.length() + user.length()) * 140 / 100 + 4096);
     body += "{\"model\":\"";
     body += jsonEscape(model);
-    body += "\",\"max_tokens\":";
+    body += "\",\"max_completion_tokens\":";
     body += String(maxTokens);
     body += ",\"system\":\"";
     body += jsonEscape(sys);

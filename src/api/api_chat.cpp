@@ -199,7 +199,7 @@ String askAboutSummary(const String& question,
 
     // ── 3. Build request body ──────────────────────────────────────
     // gpt-4o-mini — fast + cheap for interactive chat.
-    String body = "{\"model\":\"gpt-4o-mini\",\"max_tokens\":" + String(CHAT_MAX_TOKENS) + ","
+    String body = "{\"model\":\"gpt-4o-mini\",\"max_completion_tokens\":" + String(CHAT_MAX_TOKENS) + ","
                   "\"temperature\":0.2,\"messages\":[";
     body += "{\"role\":\"system\",\"content\":\"" + jsonEscape(sys) + "\"}";
 
