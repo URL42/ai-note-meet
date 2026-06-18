@@ -258,10 +258,11 @@ void setup() {
   dispCfg.buffer_len = (200*200)/8;
 
   display = new epaper_driver_display(200, 200, dispCfg);
-  display->EPD_Init();      // full-quality init + power-on
-  display->EPD_Clear();     // white buffer
-  display->EPD_Display();   // one slow full refresh to clear the panel
-  display->EPD_Init_Fast(); // switch to fast LUT (~3-5s) for all subsequent refreshes
+  display->EPD_Init();                 // full-refresh init (SSD1681 soft reset + full LUT)
+  display->EPD_Clear();                // fill buffer white
+  display->EPD_Display();              // one full refresh to clear the panel (~2s)
+  display->EPD_DisplayPartBaseImage(); // write buffer to both SSD1681 frame planes
+  display->EPD_Init_Partial();         // load partial LUT — all subsequent refresh() calls are ~300ms
 
   i2c_master_Init();
   delay(50);

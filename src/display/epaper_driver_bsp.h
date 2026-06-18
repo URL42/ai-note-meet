@@ -28,13 +28,11 @@ private:
     const int Width;
     const int Height;
     spi_device_handle_t spi;
-    uint8_t *buffer     = NULL;
-    uint8_t *lastBuffer = NULL;  // snapshot of last-displayed buffer; dirty check in EPD_Display()
-    int      bufferLen  = 0;
+    uint8_t *buffer = NULL;
 
     void spi_gpio_init();
     void spi_port_init();
-    void read_busy_H();  // wait BUSY HIGH (used after power-on and refresh)
+    void read_busy();  // wait BUSY LOW (SSD1681: LOW = idle, HIGH = busy)
 
     void set_cs_1(){gpio_set_level((gpio_num_t)lcd_spi_data.cs,1);}
     void set_cs_0(){gpio_set_level((gpio_num_t)lcd_spi_data.cs,0);}
@@ -48,15 +46,23 @@ private:
     void EPD_SendCommand(uint8_t command);
     void writeBytes(uint8_t *buffer, int len);
     void writeBytes(const uint8_t *buffer, int len);
+    void EPD_SetWindows(uint16_t Xstart, uint16_t Ystart, uint16_t Xend, uint16_t Yend);
+    void EPD_SetCursor(uint16_t Xstart, uint16_t Ystart);
+    void EPD_SetLut(const uint8_t *lut);
+    void EPD_TurnOnDisplay();
+    void EPD_TurnOnDisplayPart();
 
 public:
-    epaper_driver_display(int width, int height,custom_lcd_spi_t _lcd_spi_data);
+    epaper_driver_display(int width, int height, custom_lcd_spi_t _lcd_spi_data);
     ~epaper_driver_display();
 
-    void EPD_Init();         // full-quality init (use once on boot)
-    void EPD_Init_Fast();    // fast-refresh init (~3-5s vs ~14s)
-    void EPD_Clear();        // fill 1bpp buffer with white
-    void EPD_Display();      // full refresh; skips if buffer unchanged (dirty-flag)
+    void EPD_Init();                // full-refresh init (use on boot and after deep sleep)
+    void EPD_Clear();               // fill 1bpp buffer with white
+    void EPD_Display();             // full refresh — use for boot clear and mode transitions
+
+    void EPD_DisplayPartBaseImage(); // write buffer to both SSD1681 frame planes (call before EPD_Init_Partial)
+    void EPD_Init_Partial();         // load partial-refresh LUT — call after DisplayPartBaseImage
+    void EPD_DisplayPart();          // partial refresh (~300ms) — use for all normal UI updates
 
     void EPD_DrawColorPixel(uint16_t x, uint16_t y, uint8_t color);
 
