@@ -1,12 +1,12 @@
 # pala_meet
 
-An ESP32-S3 firmware for the **Waveshare ESP32-S3-ePaper-1.54G-EN** that combines a voice note recorder with a WiFi-connected AI meeting recorder — displayed on a 200×200 4-color e-paper screen (black, white, red, yellow).
+An ESP32-S3 firmware for the **Waveshare ESP32-S3-ePaper-1.54** that combines a voice note recorder with a WiFi-connected AI meeting recorder — displayed on a 200×200 B&W e-paper screen with partial refresh (~300ms updates).
 
 Built by merging two open-source projects:
-- **pala_note** — e-paper voice recorder with RTC, SD card, and battery UI (original hardware abstraction and display layer)
+- **pala_note** — e-paper voice recorder with RTC, SD card, and battery UI (original hardware abstraction, SSD1681 display driver, and display layer)
 - **[MeetingRecorder](https://github.com/techiesms/MeetingRecorder)** by [techiesms](https://github.com/techiesms) — WiFi meeting recorder with ElevenLabs STT, AI summaries, and web dashboard
 
-All credit to the original authors for the foundations. This project adds multi-provider AI support, Markdown output, a unified hardware layer for the 4-color G panel, a voice notes portal, and merges both feature sets into a single firmware with a single web interface at `notemeet.local`.
+All credit to the original authors for the foundations. This project adds multi-provider AI support, Markdown output, a unified hardware layer for the SSD1681 B&W panel with partial refresh, a voice notes portal, and merges both feature sets into a single firmware with a single web interface at `notemeet.local`.
 
 ---
 
@@ -43,12 +43,12 @@ A single dark-mode SPA served from port 80, accessible on the same WiFi network 
 ### Multi-provider AI
 Configurable at runtime via the web dashboard or `config.json` on the SD card — no reflash required:
 
-| Provider   | Models (examples)                                          |
-|------------|------------------------------------------------------------|
-| OpenAI     | `gpt-4o-mini` (default), `gpt-4o`, `gpt-4o-mini`         |
+| Provider   | Models (examples)                                           |
+|------------|-------------------------------------------------------------|
+| OpenAI     | `gpt-4o-mini` (default), `gpt-4o`, `gpt-4.1-mini`         |
 | Anthropic  | `claude-opus-4-8`, `claude-sonnet-4-6`, `claude-haiku-4-5` |
-| Google     | `gemini-1.5-pro`                                           |
-| Ollama     | any locally-served model                                   |
+| Google     | `gemini-1.5-pro`                                            |
+| Ollama     | any locally-served model                                    |
 
 ---
 
@@ -56,18 +56,16 @@ Configurable at runtime via the web dashboard or `config.json` on the SD card �
 
 | Component | Part |
 |-----------|------|
-| Board | Waveshare ESP32-S3-ePaper-1.54G-EN |
-| MCU | ESP32-S3-PICO-1-N8R8 (8 MB flash, 8 MB OPI PSRAM) |
-| Display | 200×200 4-color e-paper (R/Y/B/W), UC8151 controller, full refresh only |
+| Board | Waveshare ESP32-S3-ePaper-1.54 |
+| MCU | ESP32-S3 (8 MB flash, 8 MB OPI PSRAM) |
+| Display | 200×200 B&W e-paper, SSD1681 controller, partial refresh |
 | Audio | ES8311 codec (I2C + I2S) |
 | Storage | MicroSD via SDMMC 1-bit |
 | RTC | PCF85063 (NTP-synced over WiFi) |
 
-> **Display refresh time:** First boot does one slow full clear (~14s). After that, fast-refresh mode is active (~3–5s per update). The 4-color G panel does not support partial refresh.
+> **Display refresh:** Boot clear ~2s (full refresh, once). All subsequent UI updates ~300ms via partial refresh. No full-screen flash during normal use.
 
-> **Panel protection:** The firmware issues a Power-Off command (0x02) after every refresh and Power-On (0x04) before the next one. Leaving the panel drivers active long-term between refreshes can permanently damage the internal layer.
-
-> **Planned upgrade:** The 4-color G panel has ~15s refresh and no partial-refresh support. A Waveshare ESP32-S3-ePaper-1.54 (B&W, SSD1681 controller) is a drop-in hardware replacement that enables true partial refresh at ~300ms — the same driver used in pala_note.
+> **Partial refresh:** The SSD1681 supports partial refresh natively. The firmware loads the partial LUT once on boot via `EPD_Init_Partial()` and all `refresh()` calls thereafter use `EPD_DisplayPart()` — only changed pixels are driven.
 
 ---
 
@@ -122,9 +120,10 @@ Open `pala_meet.ino` in Arduino IDE and click Upload.
 ### Boot sequence
 
 1. Power on with the PWR button (GPIO18).
-2. The display clears to white (~14s — only on first boot per flash, then uses fast-refresh ~3–5s).
-3. The device connects to WiFi, syncs time via NTP, and starts the AP + web server.
-4. The idle screen shows the device name and dashboard URL.
+2. The display clears to white (~2s full refresh, once per boot).
+3. The partial-refresh LUT is loaded — all subsequent screen updates are ~300ms.
+4. The device connects to WiFi, syncs time via NTP, and starts the AP + web server.
+5. The idle screen appears.
 
 ### Button controls
 
@@ -213,10 +212,11 @@ processTask (Core 1)
 
 ### Display driver
 
-All display calls go through `draw.cpp` → `epaper_driver_bsp.cpp`:
-- Converts 1bpp frame buffer → 2bpp on the fly (EXPAND_NIBBLE lookup table)
-- Skips refresh when buffer is unchanged since last display call (dirty-flag `memcmp`)
-- Issues PON (0x04) before writing data, POF (0x02) after every refresh (panel protection)
+All display calls go through `draw.cpp` → `epaper_driver_bsp.cpp` (SSD1681):
+- 1bpp frame buffer (5,000 bytes for 200×200) written directly to the panel — no color conversion
+- Boot sequence: full refresh (clears panel) → `EPD_DisplayPartBaseImage()` (primes both SSD1681 frame planes) → `EPD_Init_Partial()` (loads partial LUT)
+- All subsequent `refresh()` calls use `EPD_DisplayPart()` — partial refresh, ~300ms
+- `fullRefresh()` available for mode transitions if a clean slate is needed
 
 ---
 
@@ -235,7 +235,7 @@ src/
   codec_board/         — Board-level codec init
   config/              — SD card config.json load/save (credentials + default tags)
   core/globals.h       — Meet-side extern declarations (WiFi, AI keys, queues)
-  display/             — E-paper driver BSP (1.54G 4-color UC8151, 2bpp)
+  display/             — E-paper driver BSP (SSD1681 B&W, 1bpp, partial refresh)
   esp_codec_dev/       — ESP codec device drivers
   i2c_bsp/             — I2C bus setup
   json/                — ArduinoJson v7 shim (ShubhJson)
@@ -250,10 +250,10 @@ src/
 
 ## Acknowledgements
 
-- **pala_note** — original e-paper recorder firmware (hardware abstraction, display, button handling, audio BSP)
+- **pala_note** — original e-paper recorder firmware (hardware abstraction, SSD1681 display driver, button handling, audio BSP)
 - **[MeetingRecorder](https://github.com/techiesms/MeetingRecorder)** by **techiesms** — WiFi meeting recorder, ElevenLabs integration, web dashboard architecture
 - **[ElevenLabs Scribe](https://elevenlabs.io/docs/api-reference/speech-to-text)** — speech-to-text with speaker diarization
-- **[Waveshare ESP32-S3-ePaper-1.54G](https://github.com/waveshareteam/ESP32-S3-ePaper-1.54G)** — official board examples, display driver reference
+- **[Waveshare ESP32-S3-ePaper-1.54](https://www.waveshare.com/wiki/ESP32-S3-ePaper-1.54)** — official board documentation and display driver reference
 
 ---
 
