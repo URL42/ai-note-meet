@@ -1,4 +1,4 @@
-# note_meet
+# AI_note_meet
 
 An ESP32-S3 firmware for the **Waveshare ESP32-S3-ePaper-1.54** that combines a voice note recorder with a WiFi-connected AI meeting recorder — displayed on a 200×200 B&W e-paper screen with partial refresh (~300ms updates).
 
