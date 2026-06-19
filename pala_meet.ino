@@ -525,7 +525,7 @@ void loop() {
     } else {
       uint32_t elapsed = (millis() - recStartMs) / 1000;
       static uint32_t lastDispMs = 0;
-      if (millis() - lastDispMs > 30000) {
+      if (millis() - lastDispMs > 5000) {
         lastDispMs = millis();
         showMeetingRecording(elapsed);
       }
