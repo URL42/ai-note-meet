@@ -268,7 +268,7 @@ void handlePortalRoot() {
       html += "<div class='tag'>" + htmlEscape(String(noteIndex[i].tag)) + "</div></div>";
       html += "<p class='text'>" + htmlEscape(transcript) + "</p>";
       if (SD_MMC.exists(wavPath))
-        html += "<audio controls src='/notes/audio?num=" + String(num) + "'></audio>";
+        html += "<audio controls preload='none' src='/notes/audio?num=" + String(num) + "'></audio>";
       html += "<div class='actions'>";
       html += "<a class='btn primary' href='/notes/txt?num=" + String(num) + "'>Download TXT</a>";
       if (SD_MMC.exists(wavPath))
