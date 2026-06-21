@@ -12,6 +12,7 @@ extern "C" {
 #include "config.h"
 #include "src/i2c_bsp/i2c_bsp.h"
 #include "src/audio/audio_bsp.h"
+#include "driver/gpio.h"
 }
 
 #include "src/power/board_power_bsp.h"
@@ -155,6 +156,7 @@ int  tagCount = 0;
 
 // ─── Power latch ──────────────────────────────────────────────────────────
 void keepBatteryPowerOn() {
+  gpio_hold_dis((gpio_num_t)PWR_HOLD_PIN);  // release deep-sleep hold if waking from sleep
   pinMode(PWR_HOLD_PIN, OUTPUT);
   digitalWrite(PWR_HOLD_PIN, HIGH);
 }

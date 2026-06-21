@@ -7,6 +7,7 @@
 #include "network.h"
 #include "../../sounds.h"
 #include "WiFi.h"
+#include "driver/gpio.h"
 
 extern "C" {
 #include "../../src/audio/audio_bsp.h"
@@ -27,6 +28,13 @@ void enterUltraSleep() {
   palaSoundSetEnabled(false);
 
   board.VBAT_POWER_ON();
+
+  // Hold GPIO17 (battery latch) HIGH during deep sleep.
+  // Without this the ESP32's GPIO output register resets when sleeping,
+  // the latch releases, and the board loses battery power — buttons can't
+  // wake something with no power.
+  gpio_hold_en((gpio_num_t)PWR_HOLD_PIN);
+  gpio_deep_sleep_hold_en();
 
   uint64_t wakeMask = (1ULL << BTN_REC) | (1ULL << BTN_PWR);
   esp_sleep_enable_ext1_wakeup(wakeMask, ESP_EXT1_WAKEUP_ANY_LOW);
