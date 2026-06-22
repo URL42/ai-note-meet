@@ -87,7 +87,7 @@ Configurable at runtime via the web dashboard or `config.json` on the SD card �
 
 ### 3. SD Card & credentials
 
-Format the SD card as FAT32. Create `config.json` in the root:
+Format the SD card as FAT32. Optionally pre-create `config.json` in the root with your credentials (see below) — or skip this and configure via the web dashboard on first boot.
 
 ```json
 {
@@ -101,17 +101,34 @@ Format the SD card as FAT32. Create `config.json` in the root:
 }
 ```
 
-All fields are optional at first boot — if `config.json` is missing or incomplete, the device starts in AP-only mode. Connect to the `notemeet` network (password `recorder123`), open `http://192.168.4.1`, and enter credentials via the Settings tab. The firmware writes them to `config.json` automatically.
+The `tags` array seeds the on-device tag list on first boot. Once tags are saved to the SD card (`/notes/tags.txt`), that file takes precedence.
 
-The `tags` array seeds the on-device tag list on first boot. Once tags are saved to the SD card (`/notes/tags.txt`), that file takes precedence — edit tags via the web dashboard Notes → Tags page.
-
-> **No `secrets.h` required.** All credentials are stored in `config.json` on the SD card and managed at runtime. There is no compile-time credential file.
+> **No `secrets.h` required.** All credentials live in `config.json` on the SD card and are managed at runtime — no recompile needed.
 
 ### 4. Flash
 
 Open `pala_meet.ino` in Arduino IDE and click Upload.
 
 > **Upload tip:** If the upload fails with "port busy" or "no such file", close the Serial Monitor first, then hold BOOT and tap RESET to enter bootloader mode.
+
+### 5. First-time WiFi setup
+
+On first boot (or whenever `config.json` has no WiFi credentials), the device starts its own access point:
+
+| AP name | Password | Dashboard URL |
+|---------|----------|---------------|
+| `notemeet` | `recorder123` | `http://192.168.4.1` |
+
+**Steps:**
+1. Power on the device — the idle screen appears showing `notemeet.local`
+2. On your phone or laptop, connect to the **`notemeet`** WiFi network (password `recorder123`)
+3. Open a browser and go to **`http://192.168.4.1`**
+4. Go to the **Settings** tab
+5. Enter your home WiFi SSID and password, your OpenAI API key, and your ElevenLabs API key — then click Save
+6. The device connects to your home WiFi. Your laptop/phone can now rejoin your home network too
+7. From here on, reach the dashboard at **`http://notemeet.local`** — no AP needed
+
+> **mDNS note:** `notemeet.local` requires your laptop and the device to be on the same WiFi network. If mDNS doesn't resolve (common on some corporate or guest networks), find the device's IP from your router's DHCP list and use that directly.
 
 ---
 
