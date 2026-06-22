@@ -8,7 +8,8 @@
   "ai_provider": "openai",
   "ai_model": "gpt-4o-mini",
   "local_url": "http://192.168.1.x:11434",
-  "ap_ssid": "MeetingRecorder",
+  "ap_ssid": "notemeet",
   "ap_pass": "recorder123",
-  "tz_min": 0
+  "tz_min": 0,
+  "tags": ["Note", "Work", "Meeting", "Buy", "Private"]
 }
