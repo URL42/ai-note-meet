@@ -44,15 +44,15 @@ void meetSetup() {
         WiFi.begin(wifiSSID.c_str(), wifiPass.c_str());
         Serial.print("[WiFi] Connecting");
         int tries = 0;
-        while (WiFi.status() != WL_CONNECTED && tries < 20) {
+        while (WiFi.status() != WL_CONNECTED && tries < 40) {
             delay(500); Serial.print("."); tries++;
         }
         if (WiFi.status() == WL_CONNECTED) {
             Serial.println("\n[WiFi] Connected: " + WiFi.localIP().toString());
             syncTimeFromNTP(6000);
         } else {
-            Serial.println("\n[WiFi] STA failed — AP only");
-            WiFi.mode(WIFI_AP);
+            Serial.println("\n[WiFi] STA failed — will retry in AP mode");
+            WiFi.mode(WIFI_AP_STA);  // keep STA active so it can reconnect if router comes up
         }
     } else {
         WiFi.mode(WIFI_AP);
