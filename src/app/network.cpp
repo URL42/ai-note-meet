@@ -125,6 +125,8 @@ bool transcribe(const String& wavPath, int noteNum) {
 void transcribeAll() {
   int pending = 0;
   for (int i=0; i<(int)noteIndex.size(); i++) if(!noteIndex[i].hasText) pending++;
+  Serial.printf("[Sync] transcribeAll: %d notes total, %d pending, webhookUrl='%s'\n",
+                (int)noteIndex.size(), pending, webhookUrl.c_str());
   int done = 0;
   for (int i=0; i<(int)noteIndex.size(); i++) {
     if (noteIndex[i].hasText) continue;
@@ -134,7 +136,16 @@ void transcribeAll() {
       continue;
     }
     showTranscribing(done, pending);
-    if (transcribe(String(wp), noteIndex[i].num)) done++;
+    if (transcribe(String(wp), noteIndex[i].num)) {
+      done++;
+      if (!webhookUrl.isEmpty()) {
+        char txtPath[64];
+        snprintf(txtPath, sizeof(txtPath), "%s/note_%03d.txt", NOTES_DIR, noteIndex[i].num);
+        String text = readSmallFile(txtPath, 2000);
+        String ts   = noteCreatedUtc(noteIndex[i].num);
+        postWebhookNote(String(noteIndex[i].tag), text, ts);
+      }
+    }
   }
 }
 
@@ -503,4 +514,85 @@ void registerNoteRoutes() {
   server.on("/notes/txt",   HTTP_GET, [](){ sendFileByNum("txt", "text/plain", true); });
   server.on("/notes/wav",   HTTP_GET, [](){ sendFileByNum("wav", "audio/wav",  true); });
   server.on("/notes/audio", HTTP_GET, [](){ sendFileByNum("wav", "audio/wav",  false); });
+}
+
+// ─── Webhook helpers ──────────────────────────────────────────────────────────
+
+static String webhookJsonEscape(const String& s) {
+  String out;
+  out.reserve(s.length() + 32);
+  for (size_t i = 0; i < s.length(); i++) {
+    unsigned char c = (unsigned char)s[i];
+    if      (c == '"')  out += "\\\"";
+    else if (c == '\\') out += "\\\\";
+    else if (c == '\n') out += "\\n";
+    else if (c == '\r') out += "\\r";
+    else if (c == '\t') out += "\\t";
+    else if (c == '\b') out += "\\b";
+    else if (c == '\f') out += "\\f";
+    else if (c < 0x20) {
+      char esc[7];
+      snprintf(esc, sizeof(esc), "\\u%04x", c);
+      out += esc;
+    }
+    else out += (char)c;
+  }
+  return out;
+}
+
+static void webhookPost(const String& payload) {
+  if (webhookUrl.isEmpty()) return;
+
+  String url = webhookUrl;
+  bool isHttps = url.startsWith("https://");
+  url.replace("https://", "");
+  url.replace("http://", "");
+
+  int slashIdx = url.indexOf('/');
+  String host = slashIdx >= 0 ? url.substring(0, slashIdx) : url;
+  String path = slashIdx >= 0 ? url.substring(slashIdx) : "/";
+  int port = isHttps ? 443 : 80;
+  int colonIdx = host.indexOf(':');
+  if (colonIdx >= 0) {
+    port = host.substring(colonIdx + 1).toInt();
+    host = host.substring(0, colonIdx);
+  }
+
+  WiFiClientSecure client;
+  client.setInsecure();
+  client.setTimeout(5000);
+  Serial.printf("[Webhook] connecting to %s:%d path=%s payload=%d bytes\n",
+                host.c_str(), port, path.c_str(), payload.length());
+  if (!client.connect(host.c_str(), port)) {
+    Serial.println("[Webhook] connect failed");
+    return;
+  }
+  client.printf("POST %s HTTP/1.1\r\nHost: %s\r\nContent-Type: application/json\r\nContent-Length: %u\r\nConnection: close\r\n\r\n",
+                path.c_str(), host.c_str(), payload.length());
+  client.print(payload);
+
+  uint32_t deadline = millis() + 5000;
+  while (client.connected() && millis() < deadline) {
+    if (client.available()) {
+      String line = client.readStringUntil('\n');
+      if (line.startsWith("HTTP/")) { Serial.printf("[Webhook] %s\n", line.c_str()); break; }
+    }
+    delay(10);
+  }
+  client.stop();
+}
+
+void postWebhookNote(const String& tag, const String& text, const String& timestamp) {
+  String j = "{\"type\":\"note\",\"tag\":\"" + webhookJsonEscape(tag) +
+             "\",\"text\":\"" + webhookJsonEscape(text) +
+             "\",\"timestamp\":\"" + webhookJsonEscape(timestamp) + "\"}";
+  webhookPost(j);
+}
+
+void postWebhookMeeting(const String& title, const String& summary, const String& transcript, const String& timestamp) {
+  String j = "{\"type\":\"meeting\",\"title\":\"" + webhookJsonEscape(title) +
+             "\",\"summary\":\""    + webhookJsonEscape(summary) +
+             "\",\"transcript\":\"" + webhookJsonEscape(transcript) +
+             "\",\"timestamp\":\""  + webhookJsonEscape(timestamp) + "\"}";
+  webhookPost(j);
 }

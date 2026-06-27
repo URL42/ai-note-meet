@@ -111,6 +111,7 @@ String wifiSSID      = "";
 String wifiPass      = "";
 String elApiKey      = "";
 String openaiApiKey  = "";
+String webhookUrl    = "";  // optional webhook endpoint; empty = disabled
 String apSSID        = "";
 String apPass        = "";
 int    tzOffsetMin   = 0;   // UTC; set in config.json

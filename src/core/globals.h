@@ -75,6 +75,7 @@ extern String wifiSSID;
 extern String wifiPass;
 extern String elApiKey;
 extern String openaiApiKey;
+extern String webhookUrl;   // optional webhook endpoint; empty = disabled
 
 // ─── Default tags from config.json ────────────────────────────────────────────
 // Populated by loadConfig(). Used by createDefaultTags() when tags.txt is missing.

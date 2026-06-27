@@ -539,6 +539,7 @@ body{height:100%;height:100dvh;overflow:hidden;-webkit-overflow-scrolling:touch;
         <div class="frow"><div class="flbl">OpenAI</div><input class="finp" id="cOAI" type="password" placeholder="sk-&hellip;"></div>
         <div class="frow"><div class="flbl">Anthropic</div><input class="finp" id="cAnthropic" type="password" placeholder="sk-ant-&hellip;"></div>
         <div class="frow"><div class="flbl">Gemini</div><input class="finp" id="cGemini" type="password" placeholder="AIza&hellip;"></div>
+        <div class="frow"><div class="flbl">Webhook URL</div><input class="finp" id="cWebhook" type="url" placeholder="https://…"></div>
       </div>
     </div>
 
@@ -942,6 +943,7 @@ async function loadHistory(showToast){
         html+='<button class="btn btn-s btn-sm" onclick="dlHistSum('+i+')" title="Download summary"><svg style="width:12px;height:12px;vertical-align:middle;display:inline-block;flex-shrink:0" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><path d="M8 2.5v8M5.5 8l2.5 2.5 2.5-2.5"/><path d="M3 13.5h10"/></svg></button>';
       }
       html+='<button class="btn btn-s btn-sm" onclick="regenMeeting('+i+')" title="Regenerate summary from transcript"><svg style="width:12px;height:12px;vertical-align:middle;display:inline-block;flex-shrink:0" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><path d="M2.5 8a5.5 5.5 0 019.4-3.9"/><polyline points="12 2 12 5 9 5"/><path d="M13.5 8a5.5 5.5 0 01-9.4 3.9"/><polyline points="4 14 4 11 7 11"/></svg></button>';
+      if(m.hasTranscript) html+='<button class="btn btn-s btn-sm" onclick="delTranscript('+i+')" title="Delete transcript (keep summary)"><svg style="width:12px;height:12px;vertical-align:middle;display:inline-block;flex-shrink:0" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><path d="M9.5 2H4.5a1 1 0 00-1 1v10a1 1 0 001 1h7a1 1 0 001-1V5.5L9.5 2z"/><path d="M9.5 2v3.5H13"/><line x1="6" y1="9" x2="10" y2="9"/><line x1="8" y1="7" x2="8" y2="11"/></svg> Transcript</button>';
       html+='<button class="btn btn-d btn-sm" onclick="delMeeting('+i+')" title="Delete meeting"><svg style="width:12px;height:12px;vertical-align:middle;display:inline-block;flex-shrink:0" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><polyline points="2.5 4.5 13.5 4.5"/><path d="M5.5 4.5V3.5a1 1 0 011-1h3a1 1 0 011 1v1"/><path d="M6.5 7.5v4M9.5 7.5v4"/><path d="M3.5 4.5l.8 8.5a1.5 1.5 0 001.5 1.5h4.4a1.5 1.5 0 001.5-1.5l.8-8.5"/></svg></button>';
       html+='</div></div>';
       html+='<div class="hbody">';
@@ -1132,6 +1134,30 @@ async function delMeeting(i){
   }
 }
 
+async function delTranscript(i){
+  if(!histItems[i]) return;
+  var dir=histItems[i].dir;
+  if(!confirm('Delete the full transcript for "'+dir+'"?\n\nThe summary is kept. This cannot be undone.')) return;
+  try{
+    var r=await fetch('/api/history/delete-transcript?dir='+encodeURIComponent(dir),{
+      method:'POST',
+      headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body:'dir='+encodeURIComponent(dir)
+    });
+    var data;
+    try{data=await r.json()}catch(je){data={ok:r.ok}}
+    if(data.ok){
+      histItems[i].hasTranscript=false;
+      toast('Transcript deleted','ok');
+      loadHistory(false);
+    } else {
+      toast('Delete failed: '+(data.error||'server error'),'err');
+    }
+  }catch(e){
+    toast('Connection error during delete','err');
+  }
+}
+
 /* ── Chat ────────────────────────────── */
 function autoH(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,100)+'px'}
 function chatKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendChat()}}
@@ -1308,17 +1334,20 @@ function onProviderChange(){
   document.getElementById('rowLocalUrl').style.display=(prov==='local')?'flex':'none';
 }
 async function loadCfg(){
-  ['cSSID','cPass','cEL','cOAI','cAnthropic','cGemini'].forEach(function(id){
-    document.getElementById(id).value='';
-  });
-  // Load current provider / model / localUrl from device
   try{
     var r=await fetch('/api/ai-config');
     if(r.ok){
       var d=await r.json();
-      if(d.provider) document.getElementById('cAIProv').value=d.provider;
-      if(d.model)    document.getElementById('cAIModel').value=d.model;
-      if(d.localUrl) document.getElementById('cLocalUrl').value=d.localUrl;
+      if(d.provider)        document.getElementById('cAIProv').value=d.provider;
+      if(d.model)           document.getElementById('cAIModel').value=d.model;
+      if(d.localUrl)        document.getElementById('cLocalUrl').value=d.localUrl;
+      if(d.webhook_url)     document.getElementById('cWebhook').value=d.webhook_url;
+      if(d.ssid)            document.getElementById('cSSID').value=d.ssid;
+      if(d.el_key)          document.getElementById('cEL').value=d.el_key;
+      if(d.openai_key)      document.getElementById('cOAI').value=d.openai_key;
+      if(d.anthropic_key)   document.getElementById('cAnthropic').value=d.anthropic_key;
+      if(d.gemini_key)      document.getElementById('cGemini').value=d.gemini_key;
+      if(d.tz_min !== undefined) document.getElementById('cTZ').value=String(d.tz_min);
       onProviderChange();
     }
   }catch(e){}
@@ -1334,6 +1363,7 @@ async function saveCfg(){
   p.append('ai_provider', document.getElementById('cAIProv').value);
   p.append('ai_model',    document.getElementById('cAIModel').value);
   p.append('local_url',   document.getElementById('cLocalUrl').value);
+  p.append('webhook_url', document.getElementById('cWebhook').value);
   p.append('tz_min',      document.getElementById('cTZ').value);
   try{
     var r=await fetch('/api/config',{method:'POST',body:p});

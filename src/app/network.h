@@ -19,3 +19,6 @@ void handleTagDelete();
 void handleNoteDelete();
 
 void registerNoteRoutes();  // called by startWebServer() to register /notes/* routes
+
+void postWebhookNote(const String& tag, const String& text, const String& timestamp);
+void postWebhookMeeting(const String& title, const String& summary, const String& transcript, const String& timestamp);

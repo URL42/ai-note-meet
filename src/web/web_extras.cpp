@@ -28,6 +28,7 @@
 #include "../api/api.h"       // jsonEscape()
 #include "../api/api_chat.h"
 #include "../time/ntp_time.h"
+#include "../app/sleep.h"     // resetActivity()
 #include <WiFi.h>
 
 static void addCORS() {
@@ -42,6 +43,7 @@ static void addCORS() {
 //  Returns every field the dashboard JS reads, plus extra info.
 // ─────────────────────────────────────────────────────────────────
 void handleApiStatus() {
+    resetActivity();  // portal polling keeps device awake
     addCORS();
 
     // ── Snapshot shared transcript/summary state under one short lock.

@@ -101,6 +101,7 @@ static void handleApiConfig() {
     String prov     = server.arg("ai_provider");
     String model    = server.arg("ai_model");
     String locUrl   = server.arg("local_url");
+    String webhook  = server.arg("webhook_url");
 
     bool wifiChanged = false;
     if (ssid.length() > 0 && ssid != wifiSSID) { wifiSSID = ssid; wifiChanged = true; }
@@ -112,6 +113,7 @@ static void handleApiConfig() {
     if (prov.length() > 0) aiProvider   = prov;
     if (model.length() > 0)aiModel      = model;
     if (locUrl.length() > 0) localUrl   = locUrl;
+    webhookUrl = webhook;  // empty string is valid (disables webhook)
 
     // Timezone — minutes from UTC; clamp to a sane range (−12 h … +14 h)
     bool tzChanged = false;
@@ -246,9 +248,12 @@ static void handleApiHistory() {
             continue;
         }
 
+        bool hasTranscript = SD_MMC.exists(("/" + name + "/full_transcript.md").c_str());
+
         if (!first) json += ",";
-        json += "{\"dir\":\""     + jsonEscape(name)    + "\","
-              +  "\"summary\":\"" + jsonEscape(summary) + "\"}";
+        json += "{\"dir\":\""          + jsonEscape(name)    + "\","
+              +  "\"summary\":\""      + jsonEscape(summary) + "\","
+              +  "\"hasTranscript\":"  + (hasTranscript ? "true" : "false") + "}";
         first = false;
     }
 
@@ -304,6 +309,46 @@ static void handleApiHistoryDelete() {
     pendingHistoryDeleteDir = "/" + dir;
     needHistoryDelete = true;
     Serial.printf("[History] Delete scheduled for processTask: %s\n", pendingHistoryDeleteDir.c_str());
+    server.send(200, "application/json", "{\"ok\":true}");
+}
+
+// ─── POST /api/history/delete-transcript ─────────────────────────────────────
+static void handleApiHistoryDeleteTranscript() {
+    server.sendHeader("Access-Control-Allow-Origin",  "*");
+    server.sendHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+    server.sendHeader("Access-Control-Allow-Headers", "Content-Type");
+    server.sendHeader("Cache-Control", "no-cache");
+
+    if (server.method() != HTTP_POST) {
+        server.send(405, "text/plain", "POST only");
+        return;
+    }
+
+    String dir = server.arg("dir");
+    if (dir.isEmpty() && server.hasArg("plain")) {
+        String body = server.arg("plain");
+        int di = body.indexOf("dir=");
+        if (di >= 0) {
+            int de = body.indexOf('&', di);
+            dir = de < 0 ? body.substring(di + 4) : body.substring(di + 4, de);
+            dir.replace("+", " ");
+        }
+    }
+
+    if (dir.isEmpty()
+     || !dir.startsWith("meeting_")
+     || dir.indexOf('/') >= 0
+     || dir.indexOf('\\') >= 0
+     || dir.indexOf("..") >= 0) {
+        server.send(400, "application/json", "{\"ok\":false,\"error\":\"invalid dir\"}");
+        return;
+    }
+
+    String path = "/" + dir + "/full_transcript.md";
+    if (SD_MMC.exists(path.c_str())) {
+        SD_MMC.remove(path.c_str());
+        Serial.printf("[History] Transcript deleted: %s\n", path.c_str());
+    }
     server.send(200, "application/json", "{\"ok\":true}");
 }
 
@@ -516,10 +561,17 @@ static void handleApiWifiScan() {
 // pre-populate without the user having to re-enter them on every visit.
 // API keys are intentionally omitted — they're write-only from the UI.
 static void handleApiAiConfig() {
-    String json = "{\"provider\":\"" + aiProvider
-                + "\",\"model\":\""   + jsonEscape(aiModel)
-                + "\",\"localUrl\":\"" + jsonEscape(localUrl)
-                + "\"}";
+    String json = "{\"provider\":\""      + aiProvider
+                + "\",\"model\":\""        + jsonEscape(aiModel)
+                + "\",\"localUrl\":\""     + jsonEscape(localUrl)
+                + "\",\"webhook_url\":\""  + jsonEscape(webhookUrl)
+                + "\",\"ssid\":\""         + jsonEscape(wifiSSID)
+                + "\",\"el_key\":\""       + jsonEscape(elApiKey)
+                + "\",\"openai_key\":\""   + jsonEscape(openaiApiKey)
+                + "\",\"anthropic_key\":\"" + jsonEscape(anthropicKey)
+                + "\",\"gemini_key\":\""   + jsonEscape(geminiKey)
+                + "\",\"tz_min\":"         + String(tzOffsetMin)
+                + "}";
     server.send(200, "application/json", json);
 }
 
@@ -537,7 +589,8 @@ void startWebServer() {
     server.on("/api/config",         HTTP_POST, handleApiConfig);
     server.on("/api/ai-config",      HTTP_GET,  handleApiAiConfig);
     server.on("/api/history",            HTTP_GET,  handleApiHistory);
-    server.on("/api/history/delete",     HTTP_POST, handleApiHistoryDelete);
+    server.on("/api/history/delete",             HTTP_POST, handleApiHistoryDelete);
+    server.on("/api/history/delete-transcript",  HTTP_POST, handleApiHistoryDeleteTranscript);
     server.on("/api/history/regenerate", HTTP_POST, handleApiHistoryRegenerate);
     server.on("/api/summary/regenerate", HTTP_POST, handleApiSummaryRegenerate);
     server.on("/api/factory-reset",      HTTP_POST, handleApiFactoryReset);

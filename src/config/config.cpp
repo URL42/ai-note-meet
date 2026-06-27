@@ -34,6 +34,7 @@ bool loadConfig() {
     wifiPass     = doc["pass"]         | "";
     elApiKey     = doc["el_key"]       | "";
     openaiApiKey = doc["openai_key"]   | "";
+    webhookUrl   = doc["webhook_url"]  | "";
     apSSID       = doc["ap_ssid"]      | AP_SSID_DEFAULT;
     apPass       = doc["ap_pass"]      | AP_PASS_DEFAULT;
     tzOffsetMin  = doc["tz_min"]       | 0;
@@ -74,6 +75,7 @@ void saveConfig() {
     doc["pass"]          = wifiPass;
     doc["el_key"]        = elApiKey;
     doc["openai_key"]    = openaiApiKey;
+    doc["webhook_url"]   = webhookUrl;
     doc["ap_ssid"]       = apSSID;
     doc["ap_pass"]       = apPass;
     doc["tz_min"]        = tzOffsetMin;

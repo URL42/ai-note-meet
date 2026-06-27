@@ -20,6 +20,8 @@
 #include "../api/api.h"
 #include "../time/ntp_time.h"
 #include "FS.h"
+
+void postWebhookMeeting(const String& title, const String& summary, const String& transcript, const String& timestamp);
 #include "SD_MMC.h"
 
 // ─── deleteDirRecursive ───────────────────────────────────────────────────────
@@ -811,6 +813,7 @@ void processTask(void* pv) {
                 }
                 finalSummarySnap = finalSummaryText;
                 xSemaphoreGive(stateMutex);
+                String transcriptSnap = readFullTranscriptFromSD(meetingDir);
 
                 Serial.println("\n╔══════════════════════════════════════════╗");
                 Serial.println("║         FINAL MEETING SUMMARY           ║");
@@ -821,6 +824,7 @@ void processTask(void* pv) {
                 // SD write outside the lock — uses the snapshot, not the live String.
                 saveSummaryToSD(finalSummarySnap);
                 Serial.println("[ProcessTask] Final summary saved to SD.");
+                postWebhookMeeting(meetingDisplayTime, finalSummarySnap, transcriptSnap, meetingTimestamp);
 
             } else {
                 Serial.println("[ProcessTask] Not enough transcript for final summary.");

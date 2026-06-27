@@ -11,5 +11,6 @@
   "ap_ssid": "notemeet",
   "ap_pass": "recorder123",
   "tz_min": 0,
-  "tags": ["Note", "Work", "Meeting", "Buy", "Private"]
+  "tags": ["Note", "Work", "Meeting", "Buy", "Private"],
+  "webhook_url": ""
 }
