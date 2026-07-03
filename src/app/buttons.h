@@ -3,4 +3,3 @@
 
 bool        isDown(int pin);
 ButtonEvent readButtonEvent(int pin);
-bool        handleIdleRec();

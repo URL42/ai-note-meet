@@ -1,26 +1,9 @@
 /*
- * web_extras.cpp  (Bug 2 fix: /api/status field names match dashboard JS)
+ * web_extras.cpp
  * ─────────────────────────────────────────────────────────────────
- * BUG FIXED:
- *   The old /api/status returned:
- *     { "state":"recording", "chunks":3, "rollingSummary":"...", "finalSummary":"..." }
- *
- *   But the dashboard JavaScript reads:
- *     d.meeting   (boolean)
- *     d.chunk     (number)
- *     d.summary   (rolling summary string)
- *     d.final     (final summary string)
- *     d.ap_ip     (access point IP)
- *     d.sta_ip    (station IP)
- *     d.ssid      (connected WiFi name)
- *     d.rssi      (signal strength)
- *
- *   All fields were misnamed → status dot always showed idle,
- *   button always said "Start Meeting", network card was blank,
- *   summary box never updated.
- *
- *   Fix: return ALL fields the JS expects, plus the extra
- *   fields so nothing breaks.
+ * /api/status (live state for the dashboard poll loop), /api/chat
+ * (ask-AI about the meeting) and /api/settime (browser-time fallback
+ * when NTP is unavailable).
  * ─────────────────────────────────────────────────────────────────
  */
 
@@ -92,6 +75,8 @@ void handleApiStatus() {
     json += "\"summary\":\"" + jsonEscape(snapRolling) + "\",";
     json += "\"final\":\""   + jsonEscape(snapFinal)   + "\",";
 
+    static const char* REGEN_NAMES[] = { "idle", "running", "done", "failed" };
+    json += "\"regen\":\""          + String(REGEN_NAMES[regenState]) + "\",";
     json += "\"state\":\""          + state                         + "\",";
     json += "\"chunks\":"           + String(snapChunks)            + ",";
     json += "\"wordCount\":"        + String(snapWords)             + ",";
@@ -170,7 +155,7 @@ void handleApiChat() {
     }
 
     // Extract "dir" — passed by the History tab so the chat can read
-    // full_transcript.txt from that meeting's directory and answer
+    // full_transcript.md from that meeting's directory and answer
     // questions from real spoken content (not just the summary).
     String dirArg = "";
     int dxi = body.indexOf("\"dir\"");

@@ -1,21 +1,10 @@
 /*
  * api_chat.cpp
  * ─────────────────────────────────────────────────────────────────
- * Sends a user question to OpenAI GPT with the meeting summary
- * and (up to 3 KB of) transcript as grounding context.
- * Uses gpt-4o-mini for fast, affordable responses.
- *
- * Resilience fixes:
- *   • Added http.setReuse(false) — prevents connection-state
- *     corruption that caused HTTP -1 on back-to-back requests.
- *   • Raised timeout to 30 s (matches api.cpp) — reduces -1 on
- *     slow links.
- *   • Added 2-attempt retry loop with WiFi reconnect between
- *     tries — matches the resilience of transcribeAudio /
- *     generateSummary and eliminates single-hiccup failures.
- *   • Error sentinel prefix changed from ⚠ to [ERR] so the
- *     dashboard JS can detect errors and render themed icons
- *     without relying on Unicode emoji (which vary by OS/font).
+ * "Ask AI" chat: sends a user question to OpenAI GPT with the
+ * meeting summary and transcript as grounding context.  Errors are
+ * returned with a "[ERR] " prefix that the dashboard JS renders as
+ * a themed warning card.
  * ─────────────────────────────────────────────────────────────────
  */
 
@@ -26,8 +15,8 @@
 #include <SD_MMC.h>
 #include "FS.h"
 
-// With OPI PSRAM enabled (XIAO ESP32-S3 Sense = 8 MB PSRAM), we have
-// enormous headroom for the transcript buffer + HTTP body assembly.
+// With 8 MB OPI PSRAM there is plenty of headroom for the transcript
+// buffer + HTTP body assembly.
 // 380 KB transcript covers ~12 hours of speech in one chat request.
 // gpt-4o-mini's input context (128 K tokens ≈ 500 KB) is the model
 // ceiling, and we sit just below it once prompt + JSON-escape are
@@ -119,7 +108,7 @@ String askAboutSummary(const String& question,
     // of the meeting from minute 0 onward.
     String fullTranscriptFromSD;
     if (meetingDir.length() > 0) {
-        String txPath = (meetingDir.startsWith("/") ? "" : "/") + meetingDir + "/full_transcript.txt";
+        String txPath = (meetingDir.startsWith("/") ? "" : "/") + meetingDir + "/full_transcript.md";
         File ft = SD_MMC.open(txPath.c_str(), FILE_READ);
         if (ft) {
             size_t sz   = ft.size();

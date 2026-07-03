@@ -1,16 +1,8 @@
 /*
  * html_pages.h
  * ─────────────────────────────────────────────────────────────────
- * Bug fixes:
- *   1. Complete visual redesign with Inter font
- *   2. Transcript tab shows FINAL transcript after meeting ends
- *      (uses new finalTranscriptText global via /api/status)
- *   3. Summary: markdown-like rendering (headers, bullets, bold)
- *   4. History: "Ask AI" button per card opens chat with that
- *      meeting's summary as context override
- *   5. Delete: query-param based, robust error handling
- *   6. Chat: shows banner when in history-meeting context mode
- *   7. Summary validated server-side; empty summaries suppressed
+ * The dashboard SPA (DASHBOARD_HTML) served at "/" — all tabs, CSS
+ * and JS in one PROGMEM string — plus the /setup redirect page.
  * ─────────────────────────────────────────────────────────────────
  */
 #pragma once
@@ -714,6 +706,7 @@ function goTab(id){
   tab=id;
   if(id==='history'&&!histLoaded) loadHistory(false);
   if(id==='notes'&&!notesLoaded) loadNotes(false);
+  if(id==='settings'&&!window._cfgLoaded){window._cfgLoaded=true;loadCfg();}
 }
 
 /* ── Toast ───────────────────────────── */
@@ -986,7 +979,7 @@ function askHistAI(i){
   if(!histItems[i]||!histItems[i].summary) return;
   var m=histItems[i];
   histCtxSummary=m.summary;
-  histCtxDir=m.dir||'';      /* used by sendChat to load full_transcript.txt */
+  histCtxDir=m.dir||'';      /* used by sendChat to load full_transcript.md */
   histCtxName=(m.dir||'meeting').replace(/^meeting_/,'').replace(/_/g,' ');
   chatMode='history';
   chatHist=[];
@@ -1047,6 +1040,23 @@ async function resetCreds(){
   }
 }
 
+/* Regeneration runs on the device's processTask (the web handler returns
+   immediately) — poll /api/status until the "regen" field leaves "running".
+   Resolves with 'done', 'failed' or 'timeout'. */
+function waitForRegen(){
+  return new Promise(function(resolve){
+    var started=Date.now();
+    var t=setInterval(async function(){
+      if(Date.now()-started>12*60*1000){clearInterval(t);resolve('timeout');return}
+      try{
+        var r=await fetch('/api/status');
+        var d=await r.json();
+        if(d.regen==='done'||d.regen==='failed'){clearInterval(t);resolve(d.regen)}
+      }catch(e){/* transient poll failure — keep waiting */}
+    },3000);
+  });
+}
+
 async function regenMeeting(i){
   if(!histItems[i]) return;
   var dir=histItems[i].dir;
@@ -1064,17 +1074,20 @@ async function regenMeeting(i){
     });
     var data;
     try{data=await r.json()}catch(je){data={ok:r.ok}}
-    if(data.ok){
+    if(!data.ok) throw new Error(data.error||'server error');
+
+    var res=await waitForRegen();
+    if(res==='done'){
       toast('Summary regenerated for "'+dir+'"','ok');
       histLoaded=false;
       loadHistory(false);
     } else {
       if(card) card.style.opacity='1';
-      toast('Regenerate failed: '+(data.error||'server error'),'err');
+      toast(res==='timeout'?'Regenerate timed out — check the device':'Regenerate failed — check API key and network','err');
     }
   }catch(e){
     if(card) card.style.opacity='1';
-    toast('Connection error during regenerate','err');
+    toast('Regenerate failed: '+e.message,'err');
   }
 }
 
@@ -1086,19 +1099,25 @@ async function regenSummary(){
     var r=await fetch('/api/summary/regenerate',{method:'POST'});
     var data;
     try{data=await r.json();}catch(je){data={ok:r.ok};}
-    if(data.ok&&data.summary){
-      summaryReady=false;
-      var rendered=renderMd(data.summary);
-      document.getElementById('sumFinal').innerHTML=rendered||data.summary;
-      summaryReady=true;
-      var dlBtn=document.getElementById('dlBtn');
-      if(dlBtn) dlBtn.style.display='';
+    if(!data.ok) throw new Error(data.error||'check API key and network');
+
+    var res=await waitForRegen();
+    if(res==='done'){
+      /* processTask updated finalSummaryText — grab it and re-render */
+      var s=await fetch('/api/status');
+      var d=await s.json();
+      if(d.finalSummary){
+        document.getElementById('sumFinal').innerHTML=renderMd(d.finalSummary)||d.finalSummary;
+        summaryReady=true;
+        var dlBtn=document.getElementById('dlBtn');
+        if(dlBtn) dlBtn.style.display='';
+      }
       toast('Summary updated','ok');
     } else {
-      toast('Retry failed: '+(data.error||'check API key and network'),'err');
+      toast(res==='timeout'?'Retry timed out — check the device':'Retry failed — check API key and network','err');
     }
   }catch(e){
-    toast('Connection error during retry','err');
+    toast('Retry failed: '+e.message,'err');
   }finally{
     if(btn){btn.disabled=false;btn.textContent='Retry';}
   }
@@ -1333,6 +1352,13 @@ function onProviderChange(){
   var prov=document.getElementById('cAIProv').value;
   document.getElementById('rowLocalUrl').style.display=(prov==='local')?'flex':'none';
 }
+/* Keys are write-only: the device only sends a last-4-chars hint, shown as
+   a placeholder. Leaving a key field empty on Save keeps the stored key. */
+function setKeyHint(id,hint){
+  var el=document.getElementById(id);
+  el.value='';
+  if(hint) el.placeholder=(hint==='saved'?'saved':'saved ('+hint+')')+' — type to replace';
+}
 async function loadCfg(){
   try{
     var r=await fetch('/api/ai-config');
@@ -1343,10 +1369,10 @@ async function loadCfg(){
       if(d.localUrl)        document.getElementById('cLocalUrl').value=d.localUrl;
       if(d.webhook_url)     document.getElementById('cWebhook').value=d.webhook_url;
       if(d.ssid)            document.getElementById('cSSID').value=d.ssid;
-      if(d.el_key)          document.getElementById('cEL').value=d.el_key;
-      if(d.openai_key)      document.getElementById('cOAI').value=d.openai_key;
-      if(d.anthropic_key)   document.getElementById('cAnthropic').value=d.anthropic_key;
-      if(d.gemini_key)      document.getElementById('cGemini').value=d.gemini_key;
+      setKeyHint('cEL',d.el_key_hint);
+      setKeyHint('cOAI',d.openai_key_hint);
+      setKeyHint('cAnthropic',d.anthropic_key_hint);
+      setKeyHint('cGemini',d.gemini_key_hint);
       if(d.tz_min !== undefined) document.getElementById('cTZ').value=String(d.tz_min);
       onProviderChange();
     }

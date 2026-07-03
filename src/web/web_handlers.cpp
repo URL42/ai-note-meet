@@ -1,26 +1,10 @@
 /*
  * web_handlers.cpp
  * ─────────────────────────────────────────────────────────────────
- * BUGS FIXED:
- *
- *   Bug A — handleApiHistory SD iterator corruption:
- *     Old code opened summary files WHILE the root directory iterator
- *     was still active. On ESP32's SD/FatFS layer this corrupts the
- *     iterator → entries get skipped → history shows empty even when
- *     meeting dirs exist on the card.
- *     Fix: two-pass approach — collect all dir names (close root),
- *     then open each summary file separately.
- *
- *   Bug B — handleApiHistoryDelete missing dir arg:
- *     On some ESP32 WebServer builds, server.arg() for a POST with
- *     a URL query param + body arg would return empty.
- *     Fix: explicit body fallback parse if server.arg() returns "".
- *
- *   Bug C — handleApiStart missing finalSummaryText reset:
- *     finalSummaryText was cleared but process.cpp now preserves
- *     finalTranscriptText / finalSummaryText after meeting end so
- *     the UI can still display them. Both must be cleared here when
- *     a NEW meeting starts.
+ * All HTTP route handlers for the dashboard: meeting start/stop,
+ * settings, history, regeneration scheduling, resets, WiFi scan.
+ * SD-heavy / GPT-heavy work is flagged over to processTask — never
+ * run it here (6 KB stack, and it blocks every other request).
  * ─────────────────────────────────────────────────────────────────
  */
 
@@ -146,17 +130,10 @@ static void handleApiConfig() {
 // ─── GET /api/history ────────────────────────────────────────────────────────
 // Scans SD root for meeting_* directories and returns their final summaries.
 //
-// BUG FIX: The original implementation opened summary files WHILE the root
-// directory iterator was still active. On ESP32's SD/FatFS layer this can
-// corrupt the iterator mid-loop (entries get skipped, or the function silently
-// returns an empty array even though meetings exist).
-//
-// Fix: TWO-PASS approach:
-//   Pass 1 — collect directory names, then CLOSE root.
-//   Pass 2 — open each summary file independently (root is closed).
-//
-// Also caps each summary at 1 200 chars to keep the JSON response small
-// (the full summary is re-fetched via /api/chat context anyway).
+// TWO-PASS on purpose: opening summary files while the root directory
+// iterator is still active corrupts the iterator on ESP32's SD/FatFS layer
+// (entries get skipped).  Pass 1 collects dir names and closes root;
+// pass 2 opens each summary file independently.
 static void handleApiHistory() {
 
     // ── Pass 1: collect meeting directory names ────────────────────
@@ -195,8 +172,12 @@ static void handleApiHistory() {
     }
 
     // ── Pass 2: read each summary (root is closed — no iterator conflict) ─
-    String json  = "[";
-    bool   first = true;
+    // Streamed as a chunked response, one meeting at a time — 30 meetings
+    // × 8 KB summaries would otherwise build a ~240 KB String in RAM.
+    server.setContentLength(CONTENT_LENGTH_UNKNOWN);
+    server.send(200, "application/json", "");
+    server.sendContent("[");
+    bool first = true;
 
     for (int i = 0; i < dirCount; i++) {
         const String& name = dirs[i];
@@ -250,15 +231,16 @@ static void handleApiHistory() {
 
         bool hasTranscript = SD_MMC.exists(("/" + name + "/full_transcript.md").c_str());
 
-        if (!first) json += ",";
-        json += "{\"dir\":\""          + jsonEscape(name)    + "\","
+        String entry = String(first ? "" : ",")
+              +  "{\"dir\":\""         + jsonEscape(name)    + "\","
               +  "\"summary\":\""      + jsonEscape(summary) + "\","
               +  "\"hasTranscript\":"  + (hasTranscript ? "true" : "false") + "}";
+        server.sendContent(entry);
         first = false;
     }
 
-    json += "]";
-    server.send(200, "application/json", json);
+    server.sendContent("]");
+    server.sendContent("");   // terminating zero-length chunk
 }
 
 // ─── POST /api/history/delete ────────────────────────────────────────────────
@@ -354,7 +336,7 @@ static void handleApiHistoryDeleteTranscript() {
 
 // ─── POST /api/history/regenerate ────────────────────────────────────────────
 // Re-run the final-summary GPT pipeline on a past meeting's saved
-// full_transcript.txt and overwrite summary_final.md with the result.
+// full_transcript.md and overwrite summary_final.md with the result.
 // Useful when the original final-summary call failed and we fell back to
 // the (much shorter) rolling summary.
 static void handleApiHistoryRegenerate() {
@@ -390,23 +372,21 @@ static void handleApiHistoryRegenerate() {
         return;
     }
 
-    String fullPath = "/" + dir;
-    Serial.printf("[History] Regenerating summary for: %s\n", fullPath.c_str());
-
-    // This is the slow path — runs GPT, can take 30 s for a short meeting
-    // or several minutes for a long map-reduce.  The browser fetch can
-    // wait; we keep handleClient() responsive by virtue of webTask being
-    // on its own pinned core.
-    String newSum = regenerateSummaryForMeeting(fullPath);
-
-    if (newSum.length() < 80) {
-        server.send(500, "application/json",
-                    "{\"ok\":false,\"error\":\"regeneration failed — check OpenAI key / network\"}");
+    if (meetingActive || processingFinal || regenState == REGEN_RUNNING || needSummaryRegen) {
+        server.send(409, "application/json",
+                    "{\"ok\":false,\"error\":\"device is busy — try again shortly\"}");
         return;
     }
 
-    String resp = "{\"ok\":true,\"summary\":\"" + jsonEscape(newSum) + "\"}";
-    server.send(200, "application/json", resp);
+    // Offload to processTask (20 KB stack) and return immediately — GPT can
+    // take 30 s to several minutes, and running it here would block every
+    // other request AND run TLS on webTask's 6 KB stack.  The dashboard
+    // polls the "regen" field of /api/status until done/failed.
+    pendingRegenDir  = "/" + dir;
+    regenState       = REGEN_RUNNING;
+    needSummaryRegen = true;
+    Serial.printf("[History] Regenerate scheduled for processTask: %s\n", pendingRegenDir.c_str());
+    server.send(200, "application/json", "{\"ok\":true,\"scheduled\":true}");
 }
 
 // ─── POST /api/summary/regenerate ────────────────────────────────────────────
@@ -429,22 +409,20 @@ static void handleApiSummaryRegenerate() {
         return;
     }
 
-    Serial.printf("[Web] Regenerating summary for current meeting: %s\n", meetingDir.c_str());
-    String newSum = regenerateSummaryForMeeting(meetingDir);
-
-    if (newSum.length() < 80) {
-        server.send(500, "application/json",
-                    "{\"ok\":false,\"error\":\"regeneration failed — check API key and network\"}");
+    if (regenState == REGEN_RUNNING || needSummaryRegen) {
+        server.send(409, "application/json",
+                    "{\"ok\":false,\"error\":\"a regeneration is already running\"}");
         return;
     }
 
-    // Update the in-RAM summary so the next /api/status poll delivers the new text.
-    xSemaphoreTake(stateMutex, portMAX_DELAY);
-    finalSummaryText = newSum;
-    xSemaphoreGive(stateMutex);
-
-    String resp = "{\"ok\":true,\"summary\":\"" + jsonEscape(newSum) + "\"}";
-    server.send(200, "application/json", resp);
+    // Offloaded to processTask — same reasons as the history variant.
+    // processTask also refreshes finalSummaryText when dir == meetingDir,
+    // so the next /api/status poll delivers the new text.
+    pendingRegenDir  = meetingDir;
+    regenState       = REGEN_RUNNING;
+    needSummaryRegen = true;
+    Serial.printf("[Web] Regenerate scheduled for current meeting: %s\n", meetingDir.c_str());
+    server.send(200, "application/json", "{\"ok\":true,\"scheduled\":true}");
 }
 
 // ─── POST /api/factory-reset ─────────────────────────────────────────────────
@@ -559,17 +537,24 @@ static void handleApiWifiScan() {
 // ─── GET /api/ai-config ──────────────────────────────────────────────────────
 // Returns current AI provider, model, and local URL so the Settings form can
 // pre-populate without the user having to re-enter them on every visit.
-// API keys are intentionally omitted — they're write-only from the UI.
+// API keys are write-only: only a last-4-chars hint is returned, never the
+// key itself — anyone on the AP could otherwise read them off this endpoint.
+static String keyHint(const String& key) {
+    if (key.length() == 0) return "";
+    if (key.length() < 8)  return "saved";
+    return "…" + key.substring(key.length() - 4);
+}
+
 static void handleApiAiConfig() {
     String json = "{\"provider\":\""      + aiProvider
                 + "\",\"model\":\""        + jsonEscape(aiModel)
                 + "\",\"localUrl\":\""     + jsonEscape(localUrl)
                 + "\",\"webhook_url\":\""  + jsonEscape(webhookUrl)
                 + "\",\"ssid\":\""         + jsonEscape(wifiSSID)
-                + "\",\"el_key\":\""       + jsonEscape(elApiKey)
-                + "\",\"openai_key\":\""   + jsonEscape(openaiApiKey)
-                + "\",\"anthropic_key\":\"" + jsonEscape(anthropicKey)
-                + "\",\"gemini_key\":\""   + jsonEscape(geminiKey)
+                + "\",\"el_key_hint\":\""       + jsonEscape(keyHint(elApiKey))
+                + "\",\"openai_key_hint\":\""   + jsonEscape(keyHint(openaiApiKey))
+                + "\",\"anthropic_key_hint\":\"" + jsonEscape(keyHint(anthropicKey))
+                + "\",\"gemini_key_hint\":\""   + jsonEscape(keyHint(geminiKey))
                 + "\",\"tz_min\":"         + String(tzOffsetMin)
                 + "}";
     server.send(200, "application/json", json);

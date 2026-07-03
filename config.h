@@ -6,7 +6,6 @@
 
 #define EPD_WIDTH  200
 #define EPD_HEIGHT 200
-#define LVGL_SPIRAM_BUFF_LEN (EPD_WIDTH * EPD_HEIGHT * 2)
 
 /* EPD SPI pins */
 #define EPD_DC_PIN    GPIO_NUM_10
@@ -32,11 +31,6 @@
 /* I2C bus */
 #define ESP32_I2C_SDA_PIN GPIO_NUM_47
 #define ESP32_I2C_SCL_PIN GPIO_NUM_48
-
-/* LVGL tick timing */
-#define EXAMPLE_LVGL_TICK_PERIOD_MS    5
-#define EXAMPLE_LVGL_TASK_MAX_DELAY_MS 500
-#define EXAMPLE_LVGL_TASK_MIN_DELAY_MS 100
 
 /* I2C peripheral addresses */
 #define I2C_RTC_DEV_Address        0x51
@@ -75,9 +69,7 @@
 #define BAT_LOW_THRESHOLD      15
 #define BAT_RECOVER_THRESHOLD  20
 
-/* Time & firmware */
-#define LOCAL_TIME_OFFSET_MIN  120   // UTC+2 (Germany summer). Set to your offset.
-#define FIRMWARE_VERSION       "v1.0"
-#define FW_VERSION             "v1.0"
+/* Firmware */
+#define FIRMWARE_VERSION  "v1.0"
 
 #endif // CONFIG_H

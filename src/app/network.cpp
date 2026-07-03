@@ -7,6 +7,7 @@
 #include "notes.h"
 #include "rtc.h"
 #include "ui.h"
+#include "../api/api.h"   // transcribeAudio() — shared ElevenLabs STT path
 #include "WiFi.h"
 #include "WiFiClientSecure.h"
 #include <WebServer.h>
@@ -15,94 +16,16 @@
 // Main server on port 80 — declared in pala_meet.ino, externed in src/core/globals.h
 extern WebServer server;
 
-static String parseWhisperText(const String& resp) {
-  int s = resp.indexOf("\"text\":\"");
-  if (s < 0) return "";
-  s += 8;
-  int e = s;
-  while (e < (int)resp.length()) {
-    if (resp[e] == '\\' && e + 1 < (int)resp.length()) { e += 2; continue; }
-    if (resp[e] == '"') break;
-    e++;
-  }
-  if (e >= (int)resp.length()) return "";
-  String text = "";
-  for (int i = s; i < e; i++) {
-    if (resp[i] == '\\' && i + 1 < e) {
-      char nx = resp[++i];
-      if      (nx == '"')  text += '"';
-      else if (nx == '\\') text += '\\';
-      else if (nx == 'n')  text += ' ';
-      else                 text += nx;
-    } else {
-      text += resp[i];
-    }
-  }
-  return text;
-}
-
-static bool transcribeOnce(const String& wavPath, int noteNum) {
-  File f = SD_MMC.open(wavPath.c_str());
-  if (!f) return false;
-  size_t fileSize = f.size();
-
-  String bnd = "----PalaBoundary";
-  String pre = "--" + bnd + "\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\nwhisper-1\r\n"
-               "--" + bnd + "\r\nContent-Disposition: form-data; name=\"file\"; filename=\"note.wav\"\r\nContent-Type: audio/wav\r\n\r\n";
-  String post = "\r\n--" + bnd + "--\r\n";
-  size_t totalLen = pre.length() + fileSize + post.length();
-
-  WiFiClientSecure client;
-  client.setInsecure();
-  client.setTimeout(90);
-
-  if (!client.connect("api.openai.com", 443)) { f.close(); return false; }
-
-  client.printf("POST /v1/audio/transcriptions HTTP/1.1\r\n"
-                "Host: api.openai.com\r\n"
-                "Authorization: Bearer %s\r\n"
-                "Content-Type: multipart/form-data; boundary=%s\r\n"
-                "Content-Length: %u\r\n"
-                "Connection: close\r\n\r\n",
-                openaiApiKey.c_str(), bnd.c_str(), (unsigned)totalLen);
-  client.print(pre);
-
-  uint8_t* chunk = (uint8_t*)heap_caps_malloc(4096, MALLOC_CAP_8BIT);
-  if (!chunk) { f.close(); client.stop(); return false; }
-  while (f.available()) {
-    int n = f.read(chunk, 4096);
-    if (n <= 0) break;
-    client.write(chunk, n);
-  }
-  heap_caps_free(chunk);
-  f.close();
-  client.print(post);
-
-  uint32_t deadline = millis() + 90000;
-  while (!client.available() && millis() < deadline) delay(20);
-
-  String resp = "";
-  bool inBody = false;
-  while (client.available() || (client.connected() && millis() < deadline)) {
-    if (!client.available()) { delay(10); continue; }
-    String line = client.readStringUntil('\n');
-    if (!inBody) {
-      if (line == "\r" || line == "") inBody = true;
-      if (line.startsWith("HTTP/") && line.indexOf(" 200 ") < 0) {
-        Serial.printf("[Whisper] %s\n", line.c_str());
-        client.stop(); return false;
-      }
-    } else {
-      resp += line;
-      if (resp.length() > 8192) break;
-    }
-  }
-  client.stop();
-
-  String text = parseWhisperText(resp);
-  if (text.length() == 0) { Serial.println("[Whisper] empty response"); return false; }
+// Note transcription uses the same ElevenLabs Scribe path as meeting chunks
+// (transcribeAudio in api.cpp — 3 attempts with WiFi reconnect between tries).
+bool transcribe(const String& wavPath, int noteNum) {
+  String text = transcribeAudio(wavPath);
+  // "["-prefixed results are error/no-speech sentinels — keep the note
+  // untranscribed so the next Sync retries it.
+  if (text.length() == 0 || text.startsWith("[")) return false;
 
   String tp = wavPath; tp.replace(".wav", ".txt");
+  if (SD_MMC.exists(tp.c_str())) SD_MMC.remove(tp.c_str());  // FILE_WRITE appends
   File tf = SD_MMC.open(tp.c_str(), FILE_WRITE);
   if (tf) { tf.print(text); tf.close(); }
 
@@ -112,14 +35,6 @@ static bool transcribeOnce(const String& wavPath, int noteNum) {
   SD_MMC.remove(wavPath.c_str());
 
   return true;
-}
-
-bool transcribe(const String& wavPath, int noteNum) {
-  for (int attempt = 0; attempt < 3; attempt++) {
-    if (transcribeOnce(wavPath, noteNum)) return true;
-    if (attempt < 2) { Serial.printf("[Whisper] retry %d/2\n", attempt + 1); delay(3000); }
-  }
-  return false;
 }
 
 void transcribeAll() {
@@ -558,9 +473,14 @@ static void webhookPost(const String& payload) {
     host = host.substring(0, colonIdx);
   }
 
-  WiFiClientSecure client;
-  client.setInsecure();
+  // Pick the client by scheme — WiFiClientSecure always negotiates TLS, so
+  // using it against a plain-http endpoint (e.g. a local n8n) fails silently.
+  WiFiClient       plainClient;
+  WiFiClientSecure secureClient;
+  secureClient.setInsecure();
+  WiFiClient& client = isHttps ? (WiFiClient&)secureClient : plainClient;
   client.setTimeout(5000);
+
   Serial.printf("[Webhook] connecting to %s:%d path=%s payload=%d bytes\n",
                 host.c_str(), port, path.c_str(), payload.length());
   if (!client.connect(host.c_str(), port)) {

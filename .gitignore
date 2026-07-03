@@ -1,6 +1,5 @@
 # Secrets — never commit real credentials
-# (the .example versions of these ARE committed as templates)
-secrets.h
+# (config.json.example IS committed as a template)
 config.json
 
 # Claude Code session data

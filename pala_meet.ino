@@ -91,9 +91,17 @@ volatile bool finalStop        = false;
 volatile bool processingFinal  = false;
 volatile bool needFactoryReset = false;
 volatile bool needWifiReconnect = false;
-volatile bool needApRestart    = false;
 volatile bool needHistoryDelete = false;
 String        pendingHistoryDeleteDir;
+
+// Summary regeneration — set by the web handlers, consumed by processTask
+// (webTask's 6 KB stack can't run the TLS-heavy GPT pipeline, and doing it
+// inline would block the dashboard for minutes).
+volatile bool      needSummaryRegen = false;
+String             pendingRegenDir;
+volatile RegenState regenState      = REGEN_IDLE;
+
+volatile bool recordChunkBusy = false;
 
 String fullTranscript      = "";
 String rollingSummary      = "";
@@ -191,21 +199,24 @@ void startRecordFlow() {
 }
 
 void startSyncFlow() {
-  const int MAX_TRIES = 20;
-  showWifiConnecting(0, MAX_TRIES);
-
-  WiFi.begin(wifiSSID.c_str(), wifiPass.c_str());
-  int tries = 0;
-  while (WiFi.status() != WL_CONNECTED && tries < MAX_TRIES) {
-    delay(500); tries++;
-    showWifiConnecting(tries, MAX_TRIES);
+  // STA is normally already up (meetSetup connects at boot) — only run the
+  // connect dance if it dropped.  Never disconnect afterwards: the meeting
+  // dashboard and mDNS depend on the STA connection staying alive.
+  if (WiFi.status() != WL_CONNECTED) {
+    const int MAX_TRIES = 20;
+    showWifiConnecting(0, MAX_TRIES);
+    WiFi.begin(wifiSSID.c_str(), wifiPass.c_str());
+    int tries = 0;
+    while (WiFi.status() != WL_CONNECTED && tries < MAX_TRIES) {
+      delay(500); tries++;
+      showWifiConnecting(tries, MAX_TRIES);
+    }
   }
 
   if (WiFi.status() == WL_CONNECTED) {
     syncTimeFromNTP(6000);
     transcribeAll();
     loadIndex();
-    WiFi.disconnect(true);
     showDone();
     soundSuccess();
     delay(1600);
@@ -592,10 +603,6 @@ void loop() {
     if (pwr == EV_SINGLE && count > 0) {
       soundNext();
       listCursor = (listCursor + 1) % count;
-      showNoteList(listCursor);
-    } else if (pwr == EV_DOUBLE && count > 0) {
-      soundNext();
-      listCursor = (listCursor - 1 + count) % count;
       showNoteList(listCursor);
     } else if (rec == EV_SINGLE && count > 0) {
       soundSelect();

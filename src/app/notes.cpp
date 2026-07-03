@@ -1,6 +1,7 @@
 #include "Arduino.h"
 #include "../../config.h"
 #include "../../globals.h"
+#include "../core/globals.h"   // tzOffsetMin
 #include "../../types.h"
 #include "notes.h"
 #include "rtc.h"
@@ -262,7 +263,7 @@ String utcToLocalDeviceLabel(const String& utcIso) {
   utc.tm_min  = utcIso.substring(14, 16).toInt();
   utc.tm_sec  = 0;
   time_t epoch = utcTmToEpoch(utc);
-  epoch += (LOCAL_TIME_OFFSET_MIN * 60);
+  epoch += (time_t)tzOffsetMin * 60;   // runtime timezone from config.json
   struct tm localTm;
   gmtime_r(&epoch, &localTm);
   char buf[22];

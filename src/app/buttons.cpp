@@ -4,7 +4,6 @@
 #include "../../types.h"
 #include "buttons.h"
 
-extern void startRecordFlow();
 extern void resetActivity();
 
 bool isDown(int pin) { return digitalRead(pin) == LOW; }
@@ -51,20 +50,4 @@ ButtonEvent readButtonEvent(int pin) {
 
   resetActivity();
   return EV_SINGLE;
-}
-
-bool handleIdleRec() {
-  if (!isDown(BTN_REC)) return false;
-  resetActivity();
-  delay(20);
-  if (!isDown(BTN_REC)) return false;
-
-  uint32_t t0 = millis();
-  while (isDown(BTN_REC) && millis()-t0 < REC_HOLD_MS) delay(5);
-
-  if (isDown(BTN_REC)) {
-    startRecordFlow();
-    return true;
-  }
-  return true;
 }

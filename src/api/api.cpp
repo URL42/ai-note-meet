@@ -2,10 +2,11 @@
  * api.cpp
  * ─────────────────────────────────────────────────────────────────
  * All outbound HTTPS calls:
- *   • ElevenLabs Scribe v1  — speech-to-text
- *   • OpenAI GPT-4o-mini    — rolling and final meeting summaries
+ *   • ElevenLabs Scribe v1 — speech-to-text (notes + meeting chunks)
+ *   • Summaries via the configured AI provider — OpenAI, Anthropic,
+ *     Gemini, or a local OpenAI-compatible server (Ollama/LM Studio)
  *
- * Both use a 3-attempt retry loop with WiFi reconnect between tries.
+ * All use a 3-attempt retry loop with WiFi reconnect between tries.
  * ─────────────────────────────────────────────────────────────────
  */
 
@@ -32,9 +33,30 @@ int MultipartUploadStream::read() {
     return -1;
 }
 
+// Bulk copy per section — HTTPClient drives uploads through readBytes, and
+// per-byte File::read() calls make chunk uploads take several times longer.
 size_t MultipartUploadStream::readBytes(char* buf, size_t len) {
     size_t n = 0;
-    while (n < len) { int c = read(); if (c < 0) break; buf[n++] = (char)c; }
+    while (n < len && _pos < _total) {
+        if (_pos < _hLen) {
+            size_t take = _hLen - _pos;
+            if (take > len - n) take = len - n;
+            memcpy(buf + n, _header.c_str() + _pos, take);
+            _pos += take; n += take;
+        } else if (_pos < _hLen + _fileLen) {
+            size_t take = _hLen + _fileLen - _pos;
+            if (take > len - n) take = len - n;
+            int got = _file.read((uint8_t*)(buf + n), take);
+            if (got <= 0) break;
+            _pos += got; n += got;
+        } else {
+            size_t off  = _pos - _hLen - _fileLen;
+            size_t take = _fLen - off;
+            if (take > len - n) take = len - n;
+            memcpy(buf + n, _footer.c_str() + off, take);
+            _pos += take; n += take;
+        }
+    }
     return n;
 }
 
@@ -189,7 +211,7 @@ static String _buildAnthropicBody(const String& sys, const String& user,
     body.reserve((sys.length() + user.length()) * 140 / 100 + 4096);
     body += "{\"model\":\"";
     body += jsonEscape(model);
-    body += "\",\"max_completion_tokens\":";
+    body += "\",\"max_tokens\":";
     body += String(maxTokens);
     body += ",\"system\":\"";
     body += jsonEscape(sys);
@@ -531,205 +553,3 @@ String synthesizeFinalSummary(const String& combinedSegmentSummaries) {
     return _aiCallRetry(sys, user, 16000, 180000);
 }
 
-// ─── reviewAndFixSummary — second-pass quality control ──────────────────────
-// The first GPT pass writes a draft.  This second pass acts as a critic:
-// it has the transcript and the draft side-by-side and must find every
-// mistake, ASR mishearing, boilerplate slip and contradiction — then
-// output the fully corrected version.  Two-pass adds ~50-90 s but
-// catches the issues that a single pass keeps missing (boilerplate
-// headings that slip through, garbled proper nouns that the writer
-// preserved out of fidelity, hallucinated details).
-String reviewAndFixSummary(const String& transcript, const String& draftSummary) {
-    if (draftSummary.length() < 50 || transcript.length() < 50) return draftSummary;
-
-    String sys =
-        "You are a STRICT editor doing forensic review of a draft meeting "
-        "summary.  Your default assumption is that the draft has "
-        "multiple errors — your job is to find every one of them and "
-        "produce a corrected version.  Outputting the draft unchanged is "
-        "a failure of your task.  Producing minimal cosmetic edits when "
-        "real errors exist is also a failure.  Be aggressive.";
-
-    String user;
-    user.reserve(transcript.length() + draftSummary.length() + 4096);
-    user += "You will receive a meeting TRANSCRIPT (from speech-to-text, "
-            "with ASR errors) and a DRAFT SUMMARY of that transcript.\n\n"
-            "The draft was written by a model that defers too much to "
-            "transcript fidelity.  It almost certainly contains errors "
-            "from the following categories — find ALL of them and fix.\n\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "MANDATORY CHECKLIST  (work through every item):\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            "[1] EVERY PROPER NOUN in the draft (every event name, "
-            "company, product, place, person, framework, website).  For "
-            "each, ask three questions:\n"
-            "      • Does this entity actually exist in the real world?\n"
-            "      • Does it fit the meeting's domain and physical "
-            "context (country, industry, who's speaking)?\n"
-            "      • Is there a similar-sounding real entity that "
-            "would fit BETTER given the context?\n"
-            "    If yes to #3 (or no to #1 or #2), REPLACE the wrong "
-            "noun with the correct one.  Examples of how this works:\n"
-            "      • A place name that doesn't fit the country being "
-            "discussed (e.g. a war-torn region appearing in a Japan "
-            "tech-meeting context) → find the real similar-sounding "
-            "place that fits.\n"
-            "      • An event/brand name that doesn't exist or doesn't "
-            "match the industry → find the real one.\n"
-            "      • A person's surname that isn't a real surname → "
-            "keep transcript spelling but flag mentally.\n"
-            "    Do NOT defer to the transcript — speech-to-text "
-            "consistently mishears the same word.  The wrong word "
-            "appearing five times is still wrong.\n\n"
-            "[2] HEADINGS.  Scan every '## ' line in the draft.  If any "
-            "heading matches one of these template names (or contains "
-            "these words anywhere in it), REWRITE it as a content-based "
-            "topic name from THIS meeting:\n"
-            "       Introduction, Introduction of <X>, Introduction and "
-            "Purpose, Purpose, Background, Welcome, Opening, Opening "
-            "Remarks, Overview, Closing Remarks, Conclusion, Conclusion "
-            "and Next Steps, Wrap-Up, Next Steps, Other Discussion, "
-            "Miscellaneous, Final Thoughts.\n"
-            "    The first heading MUST be the name of the first actual "
-            "topic — never a meta-label like 'Introduction of Judges' "
-            "or 'Purpose of the Meeting'.\n\n"
-            "[3] FORBIDDEN PHRASES inside body text.  Remove generic "
-            "filler like 'aimed to', 'highlighted the importance of', "
-            "'emphasized the need for' when they don't convey actual "
-            "content.\n\n"
-            "[4] HALLUCINATIONS — any claim in the draft that the "
-            "transcript doesn't support.  Cut them.\n\n"
-            "[5] MISSED TOPICS — anything significant in the transcript "
-            "that doesn't appear in the draft.  Add them, in "
-            "chronological order, with the same depth as the other "
-            "topics.\n\n"
-            "[6] ROLES — keep judges / audience / hosts / presenters / "
-            "participants distinct.  Fix any blurring.\n\n"
-            "[7] INTERNAL CONTRADICTIONS — resolve using the transcript.\n\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "EXPECTATION:  your output will be NOTICEABLY DIFFERENT "
-            "from the draft — different first heading, several proper "
-            "nouns corrected, possibly new sections added.  If your "
-            "output is character-identical or near-identical to the "
-            "draft, you have not actually done the review.\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            "OUTPUT: produce ONLY the corrected summary.  No preamble, "
-            "no 'Here is the revised version', no list of changes.  "
-            "Same overall format (## headings, - bullets) but better.\n\n"
-            "---\n\nTRANSCRIPT:\n";
-    user += transcript;
-    user += "\n\n---\n\nDRAFT SUMMARY:\n";
-    user += draftSummary;
-    user += "\n\n---\n\nNow output the corrected summary:";
-
-    Serial.printf("[Review] transcript %u + draft %u → reviewing...\n",
-                  transcript.length(), draftSummary.length());
-    String fixed = _aiCallRetry(sys, user, 16000, 180000);
-
-    if (fixed.length() < 100 || fixed.startsWith("[")) {
-        Serial.println("[Review] failed or empty — falling back to draft");
-        return draftSummary;
-    }
-    // Compute a rough "how much changed" metric — count chars where
-    // draft[i] != fixed[i] for the overlap.  Tells us at a glance whether
-    // the critic actually edited the draft or just rubber-stamped it.
-    size_t minLen = draftSummary.length() < fixed.length()
-                    ? draftSummary.length() : fixed.length();
-    size_t diffChars = 0;
-    for (size_t i = 0; i < minLen; i++) {
-        if (draftSummary[i] != fixed[i]) diffChars++;
-    }
-    int pct = minLen > 0 ? (int)((diffChars * 100) / minLen) : 0;
-    Serial.printf("[Review] OK — draft %u → reviewed %u chars (%u%% changed)\n",
-                  draftSummary.length(), fixed.length(), pct);
-    if (pct < 5) {
-        Serial.println("[Review] WARNING: critic barely edited the draft (<5% change)");
-    }
-    return fixed;
-}
-
-// ─── factCheckSummary — third-pass laser-focused verification ───────────────
-// The writer (pass 1) and reviewer (pass 2) cover most issues, but the
-// reviewer is sometimes too gentle and leaves persistent errors.  This
-// third pass is intentionally NARROW: it doesn't rewrite, it just
-// checks specific high-impact categories one by one and applies
-// surgical edits.  Cheap (~$0.005 with mini), adds ~30 s, catches
-// what the broader review missed.
-String factCheckSummary(const String& transcript, const String& reviewedSummary) {
-    if (reviewedSummary.length() < 50) return reviewedSummary;
-
-    String sys =
-        "You are a fact-checker doing a final pass on a meeting summary.  "
-        "Make targeted corrections only.  Do not rewrite or restructure.  "
-        "Keep all wording you don't actively change.";
-
-    String user;
-    user.reserve(transcript.length() + reviewedSummary.length() + 4096);
-    user += "You will receive a TRANSCRIPT (speech-to-text, may have errors) "
-            "and a REVIEWED SUMMARY of it.  Run ONLY the following checks "
-            "and apply surgical edits where needed.  Do not rewrite "
-            "untouched text.  Output the corrected summary.\n\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "CHECK A — Place names\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "For every place / location mentioned in the summary, "
-            "verify it fits the country and context being discussed.  "
-            "If a place is in the wrong country (e.g. a Middle-Eastern "
-            "city name appearing in a Japanese-context discussion), "
-            "swap it for the similar-sounding correct place — using "
-            "your world knowledge.  Speech-to-text systems consistently "
-            "confuse phonetically similar place names from different "
-            "regions.\n\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "CHECK B — Headings\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "Scan every '## ' heading.  If a heading contains any of "
-            "these words: 'Introduction', 'Purpose', 'Overview', "
-            "'Background', 'Welcome', 'Opening', 'Closing Remarks', "
-            "'Conclusion', 'Next Steps', 'Wrap-Up', 'Final Thoughts', "
-            "'Other', 'Miscellaneous' — REPLACE that heading with a "
-            "content-driven name describing the actual topic of the "
-            "section.  Look at the section body for the real subject.\n\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "CHECK C — Product / model names\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "For tech product names that look slightly off (missing "
-            "hyphens, mangled model numbers, alternate spellings), "
-            "normalise to the manufacturer's actual product name.  "
-            "Use your knowledge of common dev-boards, chips, modules.\n\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "CHECK D — Company / event names\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "Companies and events: if the name appears to be a "
-            "phonetic rendering of a real well-known entity in the "
-            "same industry, normalise to the correct spelling.  Apply "
-            "this even if the misspelling appears multiple times — "
-            "ASR makes the same error consistently.\n\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            "Output ONLY the corrected summary — same structure, same "
-            "wording for anything you didn't change.  No preamble.\n\n"
-            "---\n\nTRANSCRIPT:\n";
-    user += transcript;
-    user += "\n\n---\n\nREVIEWED SUMMARY:\n";
-    user += reviewedSummary;
-    user += "\n\n---\n\nNow output the fact-checked summary:";
-
-    Serial.printf("[FactCheck] transcript %u + reviewed %u → checking...\n",
-                  transcript.length(), reviewedSummary.length());
-    String fixed = _aiCallRetry(sys, user, 16000, 180000);
-
-    if (fixed.length() < 100 || fixed.startsWith("[")) {
-        Serial.println("[FactCheck] failed or empty — keeping reviewed summary");
-        return reviewedSummary;
-    }
-    size_t minLen = reviewedSummary.length() < fixed.length()
-                    ? reviewedSummary.length() : fixed.length();
-    size_t diff = 0;
-    for (size_t i = 0; i < minLen; i++) {
-        if (reviewedSummary[i] != fixed[i]) diff++;
-    }
-    int pct = minLen > 0 ? (int)((diff * 100) / minLen) : 0;
-    Serial.printf("[FactCheck] OK — reviewed %u → final %u chars (%u%% changed)\n",
-                  reviewedSummary.length(), fixed.length(), pct);
-    return fixed;
-}

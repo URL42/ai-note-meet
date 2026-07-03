@@ -14,7 +14,7 @@
 //                  Pass "" to start fresh.
 // overrideContext: if non-empty, use this summary text instead of finalSummaryText.
 // meetingDir:      if non-empty (e.g. "/meeting_2026-05-28_17-58-33"), the chat
-//                  reads the FULL transcript from full_transcript.txt in that
+//                  reads the FULL transcript from full_transcript.md in that
 //                  directory and uses it as grounding instead of the small RAM
 //                  tail.  Pass "" for the current/just-finished meeting (uses
 //                  fullTranscript in RAM).

@@ -85,6 +85,11 @@ void recordTask(void* pv) {
             continue;
         }
 
+        // Chunk WAV is now open — processTask must not run its meeting-end
+        // catch-up scan until this file is closed and enqueued (it would
+        // transcribe a half-written file and delete it while still open).
+        recordChunkBusy = true;
+
         // Write placeholder header; patched with real size after recording.
         writeWavHeader(file, 0);
         file.flush();
@@ -145,10 +150,13 @@ void recordTask(void* pv) {
         strncpy(pathBuf, wavPath.c_str(), CHUNK_PATH_LEN - 1);
         pathBuf[CHUNK_PATH_LEN - 1] = '\0';
         if (xQueueSend(chunkQueue, pathBuf, 0) != pdTRUE) {
+            // Dropped from the queue — the WAV stays on SD and the
+            // meeting-end catch-up scan in processTask will recover it.
             Serial.println("[RecordTask] WARNING: chunk queue full — chunk dropped!");
         } else {
             Serial.printf("[RecordTask] Enqueued %s\n", pathBuf);
         }
+        recordChunkBusy = false;   // file closed + enqueued (or dropped to SD)
 
         chunkIndex++;
         vTaskDelay(pdMS_TO_TICKS(10));

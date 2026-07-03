@@ -31,10 +31,6 @@
 extern String apSSID;
 extern String apPass;
 
-// Set true by handleApiConfig() when AP settings change so loop() can
-// restart softAP after the HTTP response is already sent.
-extern volatile bool needApRestart;
-
 // ─── Remote API endpoints ─────────────────────────────────────────────────────
 extern const char* EL_STT_URL;      // ElevenLabs speech-to-text
 extern const char* OPENAI_URL;      // OpenAI chat completions
@@ -109,6 +105,15 @@ extern volatile bool needFactoryReset;
 extern volatile bool needHistoryDelete;
 extern String        pendingHistoryDeleteDir;
 
+// Summary regeneration, offloaded to processTask (webTask's 6 KB stack can't
+// run the TLS-heavy GPT pipeline, and running it inline blocks the dashboard).
+// The handlers set pendingRegenDir before needSummaryRegen, same as deletes.
+// The dashboard polls regenState via /api/status ("regen" field).
+enum RegenState : uint8_t { REGEN_IDLE, REGEN_RUNNING, REGEN_DONE, REGEN_FAILED };
+extern volatile bool       needSummaryRegen;
+extern String              pendingRegenDir;
+extern volatile RegenState regenState;
+
 extern String meetingDir;
 extern String fullTranscript;
 extern String finalTranscriptText; // full transcript snapshot saved before reset
@@ -131,6 +136,13 @@ extern time_t meetingStartEpoch;
 // EST = -300).  Loaded from config.json (key "tz_min"), used by ntp_time.h
 // when calling configTime() and when re-stamping after browser-time sync.
 extern int tzOffsetMin;
+
+// True while recordTask has a chunk WAV open for writing (set at file open,
+// cleared after the path is enqueued).  processTask must not start the
+// final-summary/catch-up pass while this is set: scanning the meeting dir
+// would find the in-flight WAV and transcribe/delete a file another task
+// still holds open — deleting an open file corrupts the FAT layer.
+extern volatile bool recordChunkBusy;
 
 // ─── Chunk queue ──────────────────────────────────────────────────────────────
 // Replaces the old single-slot (chunkReady + currentChunkPath) handoff.

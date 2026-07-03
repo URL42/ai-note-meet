@@ -205,7 +205,7 @@ Settings saved via the dashboard are written to `config.json` on the SD card imm
 |------|------|-------|------|
 | `loop()` | 1 | default | State machine, button handling, display updates |
 | `recordTask` | 0 | 8 KB | Audio capture: `audio_playback_read` → WAV chunks → `chunkQueue` |
-| `processTask` | 1 | 20 KB | ElevenLabs STT + rolling/final GPT summary; also handles SD delete/factory-reset |
+| `processTask` | 1 | 20 KB | ElevenLabs STT + rolling/final AI summary; also handles SD delete, factory reset, and summary regeneration |
 | `webTask` | 1 | 6 KB | HTTP server — serves the dashboard SPA and all `/api/*` routes |
 
 `recordTask` idles (20ms delay loop) when no meeting is active. `processTask` blocks on `chunkQueue` with a 100ms timeout.
