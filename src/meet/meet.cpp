@@ -13,6 +13,7 @@
 #include "WiFi.h"
 #include "ESPmDNS.h"
 #include <WebServer.h>
+#include <DNSServer.h>
 
 // web server and route setup are declared in web_handlers.h
 // but we call startWebServer() which registers all routes and starts server
@@ -20,6 +21,22 @@ extern void startWebServer();
 
 // webTaskHandle is declared extern in meet_globals.h
 TaskHandle_t webTaskHandle = NULL;
+
+// ─── Captive portal DNS ──────────────────────────────────────────────────────
+// Answers every DNS query with the AP's own address, so joining the hotspot
+// pops the dashboard automatically instead of making the user remember
+// 192.168.4.1.
+//
+// No polling needed: on ESP32 core 3.x this is AsyncUDP-driven — start()
+// registers an onPacket callback that is serviced on the async_udp task.
+// (DNSServer::processNextRequest() still exists but is an empty
+// compatibility stub; calling it from webTask would do nothing.)
+//
+// Note the UDP socket binds IP_ANY, not just the AP interface, so the device
+// will also answer DNS queries arriving over the station link. Nothing on a
+// home LAN queries it, but a host that did would get 192.168.4.1 for every
+// name. The core's DNSServer API has no per-interface bind.
+static DNSServer dnsServer;
 
 // ─── Web task ────────────────────────────────────────────────────────────────
 static void webTask(void* pv) {
@@ -60,10 +77,20 @@ void meetSetup() {
     }
 
     // Start AP
-    String ssid = apSSID.length() > 0 ? apSSID : "notemeet";
-    String pass = apPass.length() > 0 ? apPass : "recorder123";
+    String ssid = apSSID.length() > 0 ? apSSID : AP_SSID_DEFAULT;
+    String pass = apPass.length() > 0 ? apPass : AP_PASS_DEFAULT;
     WiFi.softAP(ssid.c_str(), pass.c_str());
     Serial.println("[WiFi] AP: " + ssid + " @ " + WiFi.softAPIP().toString());
+
+    // Captive portal: hijack DNS for AP clients so any hostname they try
+    // resolves to us and the phone's "sign in to network" sheet opens the
+    // dashboard on its own.
+    dnsServer.setErrorReplyCode(DNSReplyCode::NoError);
+    if (dnsServer.start(53, "*", WiFi.softAPIP())) {
+        Serial.println("[Portal] Captive DNS active on " + WiFi.softAPIP().toString());
+    } else {
+        Serial.println("[Portal] WARNING: DNS server failed to start");
+    }
 
     // mDNS
     if (MDNS.begin("notemeet")) {
@@ -83,6 +110,24 @@ void meetSetup() {
     xTaskCreatePinnedToCore(webTask,     "web",      6144, NULL, 3, &webTaskHandle,     1);
 
     Serial.println("[Meet] Setup complete");
+}
+
+// ─── restartSoftAP ───────────────────────────────────────────────────────────
+// Applies a changed AP name/password.  The DNS server is stopped and
+// restarted around softAP() because its socket is bound to the AP interface.
+void restartSoftAP() {
+    String ssid = apSSID.length() > 0 ? apSSID : AP_SSID_DEFAULT;
+    String pass = apPass.length() > 0 ? apPass : AP_PASS_DEFAULT;
+
+    dnsServer.stop();
+    WiFi.softAPdisconnect(false);   // false = keep the AP interface up
+    delay(100);
+    WiFi.softAP(ssid.c_str(), pass.c_str());
+    delay(100);
+    dnsServer.setErrorReplyCode(DNSReplyCode::NoError);
+    dnsServer.start(53, "*", WiFi.softAPIP());
+
+    Serial.println("[WiFi] AP restarted: " + ssid + " @ " + WiFi.softAPIP().toString());
 }
 
 void meetStart() {

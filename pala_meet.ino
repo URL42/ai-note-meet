@@ -82,7 +82,7 @@ int      tickerCursor = -1;
 // Notes served via main server (port 80) — no separate WebServer instance
 
 // ─── Meeting mode globals ─────────────────────────────────────────────────
-// WebServer on port 80 — used by MeetingRecorder web dashboard.
+// WebServer on port 80 — serves the dashboard and every /api/* route.
 // Declared as "server" to match src/core/globals.h (extern WebServer server).
 WebServer server(80);
 
@@ -91,6 +91,7 @@ volatile bool finalStop        = false;
 volatile bool processingFinal  = false;
 volatile bool needFactoryReset = false;
 volatile bool needWifiReconnect = false;
+volatile bool needApRestart    = false;
 volatile bool needHistoryDelete = false;
 String        pendingHistoryDeleteDir;
 
@@ -102,6 +103,9 @@ String             pendingRegenDir;
 volatile RegenState regenState      = REGEN_IDLE;
 
 volatile bool recordChunkBusy = false;
+
+String        webhookLastResult = "";
+volatile bool needWebhookTest   = false;
 
 String fullTranscript      = "";
 String rollingSummary      = "";
@@ -241,7 +245,7 @@ void setup() {
 
   Serial.begin(115200);
   delay(300);
-  Serial.println("\n=== Pala Note " FIRMWARE_VERSION " ===");
+  Serial.println("\n=== NoteMeet " FIRMWARE_VERSION " ===");
 
   pinMode(BTN_REC, INPUT_PULLUP);
   pinMode(BTN_PWR, INPUT_PULLUP);
@@ -337,6 +341,20 @@ void loop() {
       Serial.println("[WiFi] STA connect failed — AP still active");
       WiFi.mode(WIFI_AP);
     }
+    // The address on the idle screen just changed (AP IP → station IP).
+    // Without this repaint it keeps showing 192.168.4.1 until the next
+    // state change — exactly the moment first-time setup tells the user
+    // to read the address off the screen.
+    if (state == STATE_IDLE) showIdle();
+  }
+
+  // AP name/password changed in Settings — re-broadcast after the HTTP
+  // response has gone out. Deferred to here so the saving client isn't cut
+  // off mid-reply by its own AP disappearing.
+  if (needApRestart && !meetingActive) {
+    needApRestart = false;
+    restartSoftAP();
+    if (state == STATE_IDLE) showIdle();   // address line may have changed
   }
 
   if (state == STATE_NOTE_LIST && activeTickerNeedsScroll(listCursor)) {

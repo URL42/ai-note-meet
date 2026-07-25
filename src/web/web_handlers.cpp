@@ -86,6 +86,29 @@ static void handleApiConfig() {
     String model    = server.arg("ai_model");
     String locUrl   = server.arg("local_url");
     String webhook  = server.arg("webhook_url");
+    String newApSsid = server.arg("ap_ssid");
+    String newApPass = server.arg("ap_pass");
+
+    // AP credentials.  Reject out-of-range values with a 400 rather than
+    // applying them partially: an over-long SSID is written to config.json
+    // before the AP restart fails, so the device would come up with a broken
+    // hotspot on every subsequent boot — recoverable only via the station
+    // link or by editing the SD card by hand.
+    bool apChanged = false;
+    if (newApSsid.length() > 0 || newApPass.length() > 0) {
+        if (newApSsid.length() > 32) {
+            server.send(400, "application/json",
+                        "{\"ok\":false,\"error\":\"hotspot name must be 32 characters or fewer\"}");
+            return;
+        }
+        if (newApPass.length() > 0 && (newApPass.length() < 8 || newApPass.length() > 63)) {
+            server.send(400, "application/json",
+                        "{\"ok\":false,\"error\":\"hotspot password must be 8-63 characters\"}");
+            return;
+        }
+        if (newApSsid.length() > 0 && newApSsid != apSSID) { apSSID = newApSsid; apChanged = true; }
+        if (newApPass.length() > 0 && newApPass != apPass) { apPass = newApPass; apChanged = true; }
+    }
 
     bool wifiChanged = false;
     if (ssid.length() > 0 && ssid != wifiSSID) { wifiSSID = ssid; wifiChanged = true; }
@@ -120,11 +143,14 @@ static void handleApiConfig() {
         ntpInit();
     }
 
-    // WiFi reconnect is handled in loop() — safely after HTTP response
+    // WiFi reconnect and AP restart are handled in loop() — safely after the
+    // HTTP response has been sent.
     if (wifiChanged && wifiSSID.length() > 0) needWifiReconnect = true;
+    if (apChanged) needApRestart = true;
 
-    Serial.printf("[Config] Saved — wifi changed: %s, tz changed: %s (now %+d min)\n",
-                  wifiChanged ? "YES" : "no", tzChanged ? "YES" : "no", tzOffsetMin);
+    Serial.printf("[Config] Saved — wifi changed: %s, ap changed: %s, tz changed: %s (now %+d min)\n",
+                  wifiChanged ? "YES" : "no", apChanged ? "YES" : "no",
+                  tzChanged ? "YES" : "no", tzOffsetMin);
 }
 
 // ─── GET /api/history ────────────────────────────────────────────────────────
@@ -551,6 +577,7 @@ static void handleApiAiConfig() {
                 + "\",\"localUrl\":\""     + jsonEscape(localUrl)
                 + "\",\"webhook_url\":\""  + jsonEscape(webhookUrl)
                 + "\",\"ssid\":\""         + jsonEscape(wifiSSID)
+                + "\",\"ap_ssid\":\""      + jsonEscape(apSSID.length() ? apSSID : String(AP_SSID_DEFAULT))
                 + "\",\"el_key_hint\":\""       + jsonEscape(keyHint(elApiKey))
                 + "\",\"openai_key_hint\":\""   + jsonEscape(keyHint(openaiApiKey))
                 + "\",\"anthropic_key_hint\":\"" + jsonEscape(keyHint(anthropicKey))
@@ -560,8 +587,62 @@ static void handleApiAiConfig() {
     server.send(200, "application/json", json);
 }
 
+// ─── POST /api/webhook/test ──────────────────────────────────────────────────
+// Fires a synthetic payload at the configured webhook so the whole delivery
+// chain can be checked without recording a note.  Runs in processTask (TLS
+// needs more stack than webTask has); the dashboard polls /api/status for
+// the result.
+static void handleApiWebhookTest() {
+    if (server.method() != HTTP_POST) {
+        server.send(405, "text/plain", "POST only");
+        return;
+    }
+    if (webhookUrl.isEmpty()) {
+        server.send(400, "application/json",
+                    "{\"ok\":false,\"error\":\"no webhook URL configured\"}");
+        return;
+    }
+    xSemaphoreTake(stateMutex, portMAX_DELAY);
+    webhookLastResult = "testing...";
+    xSemaphoreGive(stateMutex);
+    needWebhookTest = true;
+    server.send(200, "application/json", "{\"ok\":true,\"scheduled\":true}");
+}
+
+// ─── Captive portal ──────────────────────────────────────────────────────────
+// A phone that joins the hotspot immediately fetches a known URL to test for
+// internet.  The DNS hijack (see meet.cpp) points those lookups at us; if we
+// answer with a redirect instead of the expected response, the OS decides it
+// is behind a captive portal and opens the dashboard in its sign-in sheet.
+//
+// Requests that arrive with our own IP in the Host header are ordinary
+// dashboard traffic and must fall through to a real 404, otherwise a missing
+// asset would bounce the SPA back to "/".
+static bool requestIsForUs() {
+    String host = server.hostHeader();
+    if (host.length() == 0) return true;
+    int colon = host.indexOf(':');            // strip an explicit :port
+    if (colon > 0) host = host.substring(0, colon);
+    host.toLowerCase();
+    return host == WiFi.softAPIP().toString()
+        || host == WiFi.localIP().toString()
+        || host.startsWith("notemeet");       // .local, .lan, or a bare name
+}
+
+// Send the client back to whichever interface it actually reached us on —
+// a probe arriving over the station link must not be pointed at 192.168.4.1,
+// which is unreachable from the home LAN.
+static void redirectToPortal() {
+    IPAddress local = server.client().localIP();
+    String target = (uint32_t)local != 0 ? local.toString() : WiFi.softAPIP().toString();
+    server.sendHeader("Location", "http://" + target + "/", true);
+    server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    server.send(302, "text/plain", "");
+}
+
 // ─── 404 ─────────────────────────────────────────────────────────────────────
 static void handle404() {
+    if (!requestIsForUs()) { redirectToPortal(); return; }
     server.send(404, "text/plain", "Not found");
 }
 
@@ -581,6 +662,18 @@ void startWebServer() {
     server.on("/api/factory-reset",      HTTP_POST, handleApiFactoryReset);
     server.on("/api/reset-credentials",  HTTP_POST, handleApiResetCredentials);
     server.on("/api/wifi/scan",          HTTP_GET,  handleApiWifiScan);
+    server.on("/api/webhook/test",       HTTP_POST, handleApiWebhookTest);
+
+    // Captive-portal probe URLs — each OS checks a different one, and each
+    // expects a specific success response.  Redirecting instead is what
+    // triggers the "sign in to network" sheet.
+    server.on("/generate_204",       HTTP_GET, redirectToPortal);  // Android
+    server.on("/gen_204",            HTTP_GET, redirectToPortal);  // Android (older)
+    server.on("/hotspot-detect.html",HTTP_GET, redirectToPortal);  // iOS / macOS
+    server.on("/library/test/success.html", HTTP_GET, redirectToPortal);
+    server.on("/ncsi.txt",           HTTP_GET, redirectToPortal);  // Windows
+    server.on("/connecttest.txt",    HTTP_GET, redirectToPortal);  // Windows
+    server.on("/canonical.html",     HTTP_GET, redirectToPortal);  // Firefox
 
     // Extra routes from web_extras
     server.on("/api/status",  HTTP_GET,  handleApiStatus);

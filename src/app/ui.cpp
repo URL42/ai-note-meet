@@ -10,9 +10,25 @@
 #include "../../logo_bitmap.h"
 #include "../../sounds.h"
 #include "SD_MMC.h"
+#include <WiFi.h>
 
 #define W   200
 #define H   200
+
+// ─── Device address ───────────────────────────────────────────────────────
+// The address the dashboard is reachable on, shown on-screen so there's
+// never any guessing at a hostname or hunting through the router's DHCP
+// table.  Prefers the station IP (device joined your WiFi); falls back to
+// the softAP address when it's only running its own hotspot.
+String deviceAddress() {
+  if (WiFi.status() == WL_CONNECTED) {
+    IPAddress ip = WiFi.localIP();
+    if (ip[0] != 0) return ip.toString();
+  }
+  IPAddress ap = WiFi.softAPIP();
+  if (ap[0] != 0) return ap.toString();
+  return String("no network");
+}
 
 // ─── Icons ────────────────────────────────────────────────────────────────
 
@@ -162,9 +178,10 @@ void drawSoftFrame() {
   strokeRoundRect(12, 12, W-24, H-24, 10, 1, BLACK);
 }
 
+// Single-line wordmark at scale 2 (FreeSansBold12pt).  Scale 3 would be
+// ~162px wide — too wide for the 82px-radius battery ring on the idle screen.
 void drawProductWordmark(int cx, int y, uint8_t color) {
-  drawStr(cx - textW("pala", 2) / 2, y,      "pala", 2, color);
-  drawStr(cx - textW("note", 2) / 2, y + 22, "note", 2, color);
+  drawStrC(cx, y, "NoteMeet", 2, color);
 }
 
 void drawModernPill(int x, int y, int w, int h, const char* label, bool active) {
@@ -257,9 +274,8 @@ void showIdle() {
   clearWhite();
   int batt = readBatteryPercent();
   drawBatteryRing(batt);
-  drawProductWordmark(100, 58, BLACK);
-  fillCircle(100, 123, 5, BLACK);
-  drawStrC(100, 144, "ready", 1, BLACK);
+  drawProductWordmark(100, 77, BLACK);
+  drawStrC(100, 110, deviceAddress().c_str(), 1, BLACK);
   refresh();
 }
 
@@ -537,7 +553,7 @@ void showDeviceInfo() {
   drawStrFit(18, 112, 160, "ESP32-S3 ePaper 1.54", 1, BLACK);
   char b[24]; snprintf(b, sizeof(b), "%d notes", (int)noteIndex.size());
   drawStr(18, 138, b, 1, BLACK);
-  drawStr(18, 160, "notemeet.local", 1, BLACK);
+  drawStrFit(18, 160, 164, deviceAddress().c_str(), 1, BLACK);
   drawStr(18, 178, rtcUtcIso().length() ? "rtc set" : "rtc not set", 1, BLACK);
   refresh();
 }
@@ -547,10 +563,10 @@ void showDeviceInfo() {
 void showMeetingIdle() {
   clearWhite();
   drawStr(16, 46, "MEETING", 2, BLACK);
-  drawStr(16, 74, "RECORDER", 2, BLACK);
+  drawStr(16, 74, "MODE", 2, BLACK);
   hline(16, 90, W - 32, BLACK);
   drawStr(16, 108, "Hold REC to start", 1, BLACK);
-  drawStr(16, 128, "notemeet.local", 1, BLACK);
+  drawStrFit(16, 128, 168, deviceAddress().c_str(), 1, BLACK);
   refresh();
 }
 

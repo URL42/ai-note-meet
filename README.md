@@ -1,4 +1,4 @@
-# AI_note_meet
+# NoteMeet
 
 An ESP32-S3 firmware for the **Waveshare ESP32-S3-ePaper-1.54** that combines a voice note recorder with a WiFi-connected AI meeting recorder — displayed on a 200×200 B&W e-paper screen with partial refresh (~300ms updates).
 
@@ -38,7 +38,7 @@ A single dark-mode SPA served from port 80, accessible on the same WiFi network 
 | Summary | AI-generated meeting summary with **Retry** button to regenerate if the API call fails |
 | History | Past meetings — download `.md` files, delete, or regenerate summary |
 | Notes | Browse and manage voice notes — filter by tag, play audio, download TXT |
-| Settings | WiFi, API keys, AI provider/model, timezone |
+| Settings | WiFi, device hotspot, API keys, AI provider/model, timezone |
 
 ### Multi-provider AI
 Configurable at runtime via the web dashboard or `config.json` on the SD card — no reflash required:
@@ -120,15 +120,17 @@ On first boot (or whenever `config.json` has no WiFi credentials), the device st
 | `notemeet` | `recorder123` | `http://192.168.4.1` |
 
 **Steps:**
-1. Power on the device — the idle screen appears showing `notemeet.local`
+1. Power on the device — the idle screen shows the address it's reachable on
 2. On your phone or laptop, connect to the **`notemeet`** WiFi network (password `recorder123`)
-3. Open a browser and go to **`http://192.168.4.1`**
+3. The dashboard opens automatically — the device runs a captive portal, so joining the hotspot triggers the same "sign in to network" sheet a hotel WiFi would. If it doesn't appear, browse to **`http://192.168.4.1`**
 4. Go to the **Settings** tab
 5. Enter your home WiFi SSID and password, your OpenAI API key, and your ElevenLabs API key — then click Save
 6. The device connects to your home WiFi. Your laptop/phone can now rejoin your home network too
-7. From here on, reach the dashboard at **`http://notemeet.local`** — no AP needed
+7. From here on, reach the dashboard at the **IP shown on the device's idle screen**, or at **`http://notemeet.local`**
 
-> **mDNS note:** `notemeet.local` requires your laptop and the device to be on the same WiFi network. If mDNS doesn't resolve (common on some corporate or guest networks), find the device's IP from your router's DHCP list and use that directly.
+> **Which address?** The idle screen always shows the live one — the station IP when the device is on your WiFi, or `192.168.4.1` when it's running its own hotspot. `notemeet.local` also works when mDNS resolves, but it's unreliable on some corporate and guest networks, and generally won't resolve while you're connected to the device's own hotspot. The on-screen IP never lies; a static DHCP reservation in your router keeps it stable.
+
+> **Hotspot name:** configurable under Settings → Device Hotspot. Defaults to `notemeet` / `recorder123`.
 
 ---
 

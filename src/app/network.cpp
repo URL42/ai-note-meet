@@ -455,9 +455,19 @@ static String webhookJsonEscape(const String& s) {
   return out;
 }
 
-static void webhookPost(const String& payload) {
-  if (webhookUrl.isEmpty()) return;
+// Records the outcome of the most recent webhook POST so the dashboard can
+// show it instead of the user having to go read n8n's execution log.
+static void setWebhookResult(const String& msg) {
+  Serial.println("[Webhook] " + msg);
+  if (stateMutex) xSemaphoreTake(stateMutex, portMAX_DELAY);
+  webhookLastResult = msg;
+  if (stateMutex) xSemaphoreGive(stateMutex);
+}
 
+// One POST attempt.  Returns the HTTP status code, or a negative value when
+// the request never got far enough to receive one:
+//   -1 connect failed   -2 no response before the timeout
+static int webhookPostOnce(const String& payload) {
   String url = webhookUrl;
   bool isHttps = url.startsWith("https://");
   url.replace("https://", "");
@@ -479,27 +489,77 @@ static void webhookPost(const String& payload) {
   WiFiClientSecure secureClient;
   secureClient.setInsecure();
   WiFiClient& client = isHttps ? (WiFiClient&)secureClient : plainClient;
-  client.setTimeout(5000);
+  client.setTimeout(WEBHOOK_TIMEOUT_MS);
 
-  Serial.printf("[Webhook] connecting to %s:%d path=%s payload=%d bytes\n",
+  Serial.printf("[Webhook] POST %s:%d%s (%d bytes)\n",
                 host.c_str(), port, path.c_str(), payload.length());
-  if (!client.connect(host.c_str(), port)) {
-    Serial.println("[Webhook] connect failed");
-    return;
-  }
-  client.printf("POST %s HTTP/1.1\r\nHost: %s\r\nContent-Type: application/json\r\nContent-Length: %u\r\nConnection: close\r\n\r\n",
+  if (!client.connect(host.c_str(), port)) return -1;
+
+  client.printf("POST %s HTTP/1.1\r\nHost: %s\r\nContent-Type: application/json\r\n"
+                "Content-Length: %u\r\nConnection: close\r\n\r\n",
                 path.c_str(), host.c_str(), payload.length());
   client.print(payload);
 
-  uint32_t deadline = millis() + 5000;
+  // Wait for the status line.  With the n8n webhook set to respond when the
+  // workflow finishes, this code reflects whether the note was actually
+  // written — which is the whole point of checking it.
+  int code = -2;
+  uint32_t deadline = millis() + WEBHOOK_TIMEOUT_MS;
   while (client.connected() && millis() < deadline) {
     if (client.available()) {
       String line = client.readStringUntil('\n');
-      if (line.startsWith("HTTP/")) { Serial.printf("[Webhook] %s\n", line.c_str()); break; }
+      if (line.startsWith("HTTP/")) {
+        int sp = line.indexOf(' ');
+        if (sp > 0) code = line.substring(sp + 1, sp + 4).toInt();
+        break;
+      }
     }
     delay(10);
   }
   client.stop();
+  return code;
+}
+
+// POST with retries.  Returns true only on a 2xx response.
+static bool webhookPost(const String& payload) {
+  if (webhookUrl.isEmpty()) return false;
+
+  for (int attempt = 1; attempt <= WEBHOOK_MAX_ATTEMPTS; attempt++) {
+    int code = webhookPostOnce(payload);
+
+    if (code >= 200 && code < 300) {
+      setWebhookResult("ok (HTTP " + String(code) + ")");
+      return true;
+    }
+
+    String why = code == -1 ? "connect failed"
+               : code == -2 ? "no response (timeout)"
+                            : "HTTP " + String(code);
+    if (attempt < WEBHOOK_MAX_ATTEMPTS) {
+      Serial.printf("[Webhook] attempt %d/%d failed: %s — retrying\n",
+                    attempt, WEBHOOK_MAX_ATTEMPTS, why.c_str());
+      delay(attempt * 1000);
+    } else {
+      setWebhookResult("FAILED after " + String(WEBHOOK_MAX_ATTEMPTS)
+                       + " attempts: " + why);
+    }
+  }
+  return false;
+}
+
+// ─── runWebhookTest ───────────────────────────────────────────────────────────
+// Sends a synthetic payload so the whole chain (device → n8n → wherever the
+// note lands) can be verified from the dashboard without recording anything.
+// Called from processTask — TLS needs more stack than webTask has.
+void runWebhookTest() {
+  if (webhookUrl.isEmpty()) {
+    setWebhookResult("no webhook URL configured");
+    return;
+  }
+  String j = "{\"type\":\"test\",\"tag\":\"Test\","
+             "\"text\":\"Test payload from the NoteMeet dashboard.\","
+             "\"timestamp\":\"" + webhookJsonEscape(currentUtcIso()) + "\"}";
+  webhookPost(j);
 }
 
 void postWebhookNote(const String& tag, const String& text, const String& timestamp) {

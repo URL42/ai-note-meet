@@ -32,9 +32,10 @@ void handleApiStatus() {
     // ── Snapshot shared transcript/summary state under one short lock.
     //    processTask is the writer; without the lock a String += /
     //    .remove() in-flight can let us read freed memory here.
-    String snapTranscript, snapRolling, snapFinal, snapFinalTrans;
+    String snapTranscript, snapRolling, snapFinal, snapFinalTrans, snapWebhook;
     int    snapChunks, snapWords;
     xSemaphoreTake(stateMutex, portMAX_DELAY);
+    snapWebhook = webhookLastResult;
     // Trim while we hold the lock — substring() reads must be atomic w/ the source
     int tStart  = max(0, (int)fullTranscript.length()      - 1200);
     int ftStart = max(0, (int)finalTranscriptText.length() - 4000);
@@ -77,6 +78,7 @@ void handleApiStatus() {
 
     static const char* REGEN_NAMES[] = { "idle", "running", "done", "failed" };
     json += "\"regen\":\""          + String(REGEN_NAMES[regenState]) + "\",";
+    json += "\"webhook\":\""        + jsonEscape(snapWebhook)         + "\",";
     json += "\"state\":\""          + state                         + "\",";
     json += "\"chunks\":"           + String(snapChunks)            + ",";
     json += "\"wordCount\":"        + String(snapWords)             + ",";

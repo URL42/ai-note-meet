@@ -495,6 +495,15 @@ body{height:100%;height:100dvh;overflow:hidden;-webkit-overflow-scrolling:touch;
     </div>
 
     <div class="s-sec">
+      <div class="s-lbl">Device Hotspot</div>
+      <div class="fgrp">
+        <div class="frow"><div class="flbl">Hotspot name</div><input class="finp" id="cApSSID" type="text" maxlength="32" placeholder="notemeet"></div>
+        <div class="frow"><div class="flbl">Hotspot pass</div><input class="finp" id="cApPass" type="password" minlength="8" maxlength="63" placeholder="8-63 characters, blank to keep"></div>
+      </div>
+      <div style="font-size:11px;color:var(--t2);margin-top:6px">The network the device broadcasts when it can't reach your WiFi. Saving restarts it &mdash; you'll need to rejoin if you're connected to it right now.</div>
+    </div>
+
+    <div class="s-sec">
       <div class="s-lbl">AI Provider</div>
       <div class="fgrp">
         <div class="frow">
@@ -533,6 +542,11 @@ body{height:100%;height:100dvh;overflow:hidden;-webkit-overflow-scrolling:touch;
         <div class="frow"><div class="flbl">Gemini</div><input class="finp" id="cGemini" type="password" placeholder="AIza&hellip;"></div>
         <div class="frow"><div class="flbl">Webhook URL</div><input class="finp" id="cWebhook" type="url" placeholder="https://…"></div>
       </div>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap">
+        <button class="btn btn-s btn-sm" id="whTestBtn" onclick="testWebhook()">Send test payload</button>
+        <span id="whResult" style="font-size:11px;font-family:var(--fm);color:var(--t2)"></span>
+      </div>
+      <div style="font-size:11px;color:var(--t2);margin-top:6px">Save first, then test. A pass means your endpoint accepted the payload &mdash; set the receiving workflow to respond when it <em>finishes</em>, or a success here only proves the request was received, not that anything was written.</div>
     </div>
 
     <div class="s-sec">
@@ -586,7 +600,7 @@ body{height:100%;height:100dvh;overflow:hidden;-webkit-overflow-scrolling:touch;
     <div class="s-sec" style="margin-top:28px">
       <div class="s-lbl">Device Info</div>
       <div class="fgrp">
-        <div class="frow"><div class="flbl">Firmware</div><span style="font-family:var(--fm);font-size:12px;color:var(--t1)">MeetingRecorder</span></div>
+        <div class="frow"><div class="flbl">Firmware</div><span style="font-family:var(--fm);font-size:12px;color:var(--t1)">NoteMeet</span></div>
         <div class="frow"><div class="flbl">Free RAM</div><span class="finp-val" id="aRam">&#8212;</span></div>
         <div class="frow"><div class="flbl">Uptime</div><span class="finp-val" id="aUp">&#8212;</span></div>
         <div class="frow"><div class="flbl">NTP Synced</div><span class="finp-val" id="aNtp">&#8212;</span></div>
@@ -1030,13 +1044,13 @@ async function resetCreds(){
     var data;
     try{data=await r.json()}catch(je){data={ok:r.ok}}
     if(data.ok){
-      document.body.innerHTML='<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:Inter,system-ui,sans-serif;color:#cdd6f4;background:#11111b;text-align:center;padding:20px"><div style="font-size:48px;margin-bottom:20px">↺</div><div style="font-size:22px;font-weight:600;margin-bottom:12px">Credentials Cleared</div><div style="font-size:14px;color:#9399b2;max-width:400px;line-height:1.6">Your saved meetings are intact.<br><br>The device is rebooting into setup mode &mdash; connect to the <strong style="color:#89b4fa">MeetingRecorder</strong> hotspot and open <strong style="color:#89b4fa">http://192.168.4.1/setup</strong> to re-enter WiFi and API keys.</div></div>';
+      document.body.innerHTML='<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:Inter,system-ui,sans-serif;color:#cdd6f4;background:#11111b;text-align:center;padding:20px"><div style="font-size:48px;margin-bottom:20px">↺</div><div style="font-size:22px;font-weight:600;margin-bottom:12px">Credentials Cleared</div><div style="font-size:14px;color:#9399b2;max-width:400px;line-height:1.6">Your saved meetings are intact.<br><br>The device is rebooting into setup mode &mdash; connect to the <strong style="color:#89b4fa">notemeet</strong> hotspot and open <strong style="color:#89b4fa">http://192.168.4.1/setup</strong> to re-enter WiFi and API keys.</div></div>';
     } else {
       toast('Reset failed: '+(data.error||'server error'),'err');
     }
   }catch(e){
     /* Fetch will fail mid-reboot — that's the success signal */
-    document.body.innerHTML='<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:Inter,system-ui,sans-serif;color:#cdd6f4;background:#11111b;text-align:center;padding:20px"><div style="font-size:48px;margin-bottom:20px">↺</div><div style="font-size:22px;font-weight:600;margin-bottom:12px">Credentials Cleared</div><div style="font-size:14px;color:#9399b2;max-width:400px;line-height:1.6">Your saved meetings are intact.<br><br>The device is rebooting into setup mode &mdash; connect to the <strong style="color:#89b4fa">MeetingRecorder</strong> hotspot and open <strong style="color:#89b4fa">http://192.168.4.1/setup</strong> to re-enter WiFi and API keys.</div></div>';
+    document.body.innerHTML='<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:Inter,system-ui,sans-serif;color:#cdd6f4;background:#11111b;text-align:center;padding:20px"><div style="font-size:48px;margin-bottom:20px">↺</div><div style="font-size:22px;font-weight:600;margin-bottom:12px">Credentials Cleared</div><div style="font-size:14px;color:#9399b2;max-width:400px;line-height:1.6">Your saved meetings are intact.<br><br>The device is rebooting into setup mode &mdash; connect to the <strong style="color:#89b4fa">notemeet</strong> hotspot and open <strong style="color:#89b4fa">http://192.168.4.1/setup</strong> to re-enter WiFi and API keys.</div></div>';
   }
 }
 
@@ -1369,6 +1383,7 @@ async function loadCfg(){
       if(d.localUrl)        document.getElementById('cLocalUrl').value=d.localUrl;
       if(d.webhook_url)     document.getElementById('cWebhook').value=d.webhook_url;
       if(d.ssid)            document.getElementById('cSSID').value=d.ssid;
+      if(d.ap_ssid)         document.getElementById('cApSSID').value=d.ap_ssid;
       setKeyHint('cEL',d.el_key_hint);
       setKeyHint('cOAI',d.openai_key_hint);
       setKeyHint('cAnthropic',d.anthropic_key_hint);
@@ -1382,6 +1397,8 @@ async function saveCfg(){
   var p=new URLSearchParams();
   p.append('ssid',        document.getElementById('cSSID').value);
   p.append('pass',        document.getElementById('cPass').value);
+  p.append('ap_ssid',     document.getElementById('cApSSID').value);
+  p.append('ap_pass',     document.getElementById('cApPass').value);
   p.append('el_key',      document.getElementById('cEL').value);
   p.append('openai_key',  document.getElementById('cOAI').value);
   p.append('anthropic_key',document.getElementById('cAnthropic').value);
@@ -1393,9 +1410,52 @@ async function saveCfg(){
   p.append('tz_min',      document.getElementById('cTZ').value);
   try{
     var r=await fetch('/api/config',{method:'POST',body:p});
-    if(!r.ok){toast('Save failed — check connection','err');return;}
+    if(!r.ok){
+      var msg='check connection';
+      try{var d=await r.json();if(d.error)msg=d.error}catch(e){}
+      toast('Save failed — '+msg,'err');return;
+    }
     toast('Settings saved ✓','ok');
+    document.getElementById('cApPass').value='';
+    document.getElementById('cPass').value='';
   }catch(e){toast('Error saving settings','err')}
+}
+
+/* Fires a synthetic payload at the webhook and polls /api/status for the
+   result the device actually got back. */
+async function testWebhook(){
+  var btn=document.getElementById('whTestBtn');
+  var out=document.getElementById('whResult');
+  btn.disabled=true;out.textContent='sending…';out.style.color='var(--t2)';
+  try{
+    var r=await fetch('/api/webhook/test',{method:'POST'});
+    var d;try{d=await r.json()}catch(e){d={ok:r.ok}}
+    if(!d.ok) throw new Error(d.error||'request refused');
+
+    var started=Date.now();
+    var t=setInterval(async function(){
+      if(Date.now()-started>70000){
+        clearInterval(t);btn.disabled=false;
+        out.textContent='timed out waiting for the device';out.style.color='var(--red)';
+        return;
+      }
+      try{
+        var s=await fetch('/api/status');
+        var j=await s.json();
+        var w=j.webhook||'';
+        if(w&&w!=='testing...'){
+          clearInterval(t);btn.disabled=false;
+          var ok=w.indexOf('ok')===0;
+          out.textContent=w;
+          out.style.color=ok?'var(--green)':'var(--red)';
+          toast(ok?'Webhook reachable':'Webhook failed — '+w,ok?'ok':'err');
+        }
+      }catch(e){}
+    },2000);
+  }catch(e){
+    btn.disabled=false;
+    out.textContent=e.message;out.style.color='var(--red)';
+  }
 }
 
 /* ── Copy / Download ────────────────── */

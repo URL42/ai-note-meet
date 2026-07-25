@@ -12,6 +12,7 @@
 #include "process.h"
 #include "../core/globals.h"
 #include "../api/api.h"
+#include "../app/network.h"   // runWebhookTest()
 #include "../time/ntp_time.h"
 #include "FS.h"
 
@@ -605,6 +606,12 @@ void processTask(void* pv) {
                 regenState = REGEN_FAILED;
                 Serial.println("[Regen] FAILED — check API key / network");
             }
+        }
+
+        // ── 0d. Webhook test from the dashboard ─────────────────────────────
+        if (needWebhookTest) {
+            needWebhookTest = false;
+            runWebhookTest();
         }
 
         // ── 1. Pick up a ready chunk ────────────────────────────────────────

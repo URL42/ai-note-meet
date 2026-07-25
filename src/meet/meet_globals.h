@@ -1,7 +1,7 @@
 #pragma once
 // ─── Meeting mode shared state ─────────────────────────────────────────────
-// Pulls in MeetingRecorder's central globals header, which declares all
-// shared variables (extern).  Definitions live in pala_meet.ino.
+// Pulls in the central globals header, which declares all shared
+// variables (extern).  Definitions live in pala_meet.ino.
 //
 // Any translation unit that needs meeting state should #include this header.
 

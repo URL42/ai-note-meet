@@ -4,7 +4,7 @@
  * ─────────────────────────────────────────────────────────────────
  * Central header included by every module.
  * Declares (extern) every shared variable so all .cpp files can
- * read/write the same state.  Definitions live in MeetingRecorder.ino
+ * read/write the same state.  Definitions live in pala_meet.ino.
  * ─────────────────────────────────────────────────────────────────
  */
 
@@ -30,6 +30,12 @@
 // Changed via the Settings UI without reflashing.
 extern String apSSID;
 extern String apPass;
+
+// Set by handleApiConfig() when the AP name/password changes; consumed by
+// loop(), which calls restartSoftAP() after the HTTP response has been sent
+// (restarting from inside the handler would drop the client's connection
+// before it ever received the reply).
+extern volatile bool needApRestart;
 
 // ─── Remote API endpoints ─────────────────────────────────────────────────────
 extern const char* EL_STT_URL;      // ElevenLabs speech-to-text
@@ -72,6 +78,21 @@ extern String wifiPass;
 extern String elApiKey;
 extern String openaiApiKey;
 extern String webhookUrl;   // optional webhook endpoint; empty = disabled
+
+// ─── Webhook delivery ─────────────────────────────────────────────────────────
+// Retries and timeout for the outbound webhook POST.  Set the n8n webhook
+// node to respond when the workflow FINISHES (not immediately) — otherwise a
+// 200 only means "request accepted" and delivery failures stay invisible.
+#define WEBHOOK_MAX_ATTEMPTS 3
+#define WEBHOOK_TIMEOUT_MS   15000
+
+// Human-readable result of the last webhook POST, surfaced by /api/status so
+// a failed delivery is visible in the dashboard.  Guarded by stateMutex.
+extern String webhookLastResult;
+
+// Set by /api/webhook/test; consumed by processTask, which has the stack for
+// the TLS handshake (webTask's 6 KB does not).
+extern volatile bool needWebhookTest;
 
 // ─── Default tags from config.json ────────────────────────────────────────────
 // Populated by loadConfig(). Used by createDefaultTags() when tags.txt is missing.

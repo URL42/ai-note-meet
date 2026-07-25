@@ -1,5 +1,5 @@
 {
-  "name": "AI Meeting Recorder",
+  "name": "NoteMeet",
   "version": "1.0.0",
   "new_install_prompt_erase": true,
 
@@ -9,11 +9,11 @@
 
       "parts": [
         {
-          "path": "firmware/MeetingRecorder.ino.bootloader.bin",
+          "path": "firmware/pala_meet.ino.bootloader.bin",
           "offset": "0x0"
         },
         {
-          "path": "firmware/MeetingRecorder.ino.partitions.bin",
+          "path": "firmware/pala_meet.ino.partitions.bin",
           "offset": "0x8000"
         },
         {
@@ -21,7 +21,7 @@
           "offset": "0xe000"
         },
         {
-          "path": "firmware/MeetingRecorder.ino.bin",
+          "path": "firmware/pala_meet.ino.bin",
           "offset": "0x10000"
         }
       ]

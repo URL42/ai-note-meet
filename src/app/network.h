@@ -20,5 +20,9 @@ void handleNoteDelete();
 
 void registerNoteRoutes();  // called by startWebServer() to register /notes/* routes
 
+// Sends a synthetic payload through the webhook so the chain can be tested
+// from the dashboard. Call from processTask — TLS needs its larger stack.
+void runWebhookTest();
+
 void postWebhookNote(const String& tag, const String& text, const String& timestamp);
 void postWebhookMeeting(const String& title, const String& summary, const String& transcript, const String& timestamp);

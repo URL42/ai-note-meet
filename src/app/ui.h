@@ -12,6 +12,10 @@ void iconSync(int cx, int cy);
 void iconWifi(int cx, int cy);
 void iconNoteLines(int cx, int cy);
 
+// Dashboard address shown on-screen: station IP when joined to a network,
+// softAP IP otherwise, "no network" if neither is up.
+String deviceAddress();
+
 // Layout helpers
 void drawHeader(const char* title, const char* rightInfo = nullptr);
 void drawHints(const char* recLabel, const char* pwrLabel);
