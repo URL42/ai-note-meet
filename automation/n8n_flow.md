@@ -20,6 +20,26 @@ into a Markdown file in an Obsidian vault.
 **Send test payload** button and is written to a `test/` subfolder so it never
 pollutes real notes.
 
+## What gets written
+
+| Payload | File | Contents |
+|---|---|---|
+| `note` | `notes/<date> <Tag>.md` | The transcript of the voice note |
+| `meeting` | `meetings/<date> Meeting.md` | AI summary, then the full transcript under `## Full transcript` |
+| `test` | `test/<date> Test.md` | Fixed test string |
+
+Every file gets YAML frontmatter (`source`, `type`, `created`) so it's
+queryable from Dataview.
+
+The meeting summary already contains its own `##` headings, so it sits at top
+level and the transcript is one more sibling section — fold it from the gutter
+in Obsidian when you only want the summary. Long meetings make large files:
+the device sends the complete transcript, so a two-hour meeting is roughly
+90 KB of Markdown in one note.
+
+Filenames are derived from the payload timestamp, so a device retry
+overwrites the previous file rather than creating a duplicate.
+
 ## Setup
 
 1. Import `notemeet_n8n_workflow.json` into n8n.
