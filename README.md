@@ -6,7 +6,7 @@ Built by merging two open-source projects:
 - **pala_note** — e-paper voice recorder with RTC, SD card, and battery UI (original hardware abstraction, SSD1681 display driver, and display layer)
 - **[MeetingRecorder](https://github.com/techiesms/MeetingRecorder)** by [techiesms](https://github.com/techiesms) — WiFi meeting recorder with ElevenLabs STT, AI summaries, and web dashboard
 
-All credit to the original authors for the foundations. This project adds multi-provider AI support, Markdown output, a unified hardware layer for the SSD1681 B&W panel with partial refresh, a voice notes portal, and merges both feature sets into a single firmware with a single web interface at `notemeet.local`.
+All credit to the original authors for the foundations. This project adds multi-provider AI support, Markdown output, a unified hardware layer for the SSD1681 B&W panel with partial refresh, a voice notes portal, an optional webhook push, and merges both feature sets into a single firmware behind one web dashboard.
 
 ---
 
@@ -20,6 +20,7 @@ All credit to the original authors for the foundations. This project adds multi-
 - RTC-stamped filenames
 - Battery level indicator
 - Deep sleep with wake on button press
+- Optional webhook push on transcription — see [Pushing notes elsewhere](#pushing-notes-elsewhere)
 
 ### Meeting mode
 - Record long meetings in 15-second WAV chunks to SD card (Core 0 audio capture task)
@@ -28,8 +29,10 @@ All credit to the original authors for the foundations. This project adds multi-
 - Summary generated using single-call or map-reduce strategy depending on meeting length
 - Start/stop recording from the device buttons **or** from the web dashboard
 
-### Web dashboard — `notemeet.local`
-A single dark-mode SPA served from port 80, accessible on the same WiFi network or via the device's own AP (`notemeet` / `recorder123` → `http://192.168.4.1`):
+### Web dashboard
+A single dark-mode SPA served from port 80. **The device shows its own address on the idle screen** — the station IP when it's joined to your WiFi, or `192.168.4.1` when it's running its own hotspot. `notemeet.local` also works wherever mDNS resolves.
+
+Joining the device's hotspot (`notemeet` / `recorder123` by default, changeable in Settings) opens the dashboard automatically via a captive portal, the same way hotel WiFi does.
 
 | Tab | What it does |
 |-----|-------------|
@@ -38,7 +41,7 @@ A single dark-mode SPA served from port 80, accessible on the same WiFi network 
 | Summary | AI-generated meeting summary with **Retry** button to regenerate if the API call fails |
 | History | Past meetings — download `.md` files, delete, or regenerate summary |
 | Notes | Browse and manage voice notes — filter by tag, play audio, download TXT |
-| Settings | WiFi, device hotspot, API keys, AI provider/model, timezone |
+| Settings | WiFi, device hotspot, API keys, AI provider/model, timezone, webhook (with a **Send test payload** button) |
 
 ### Multi-provider AI
 Configurable at runtime via the web dashboard or `config.json` on the SD card — no reflash required:
@@ -97,11 +100,14 @@ Format the SD card as FAT32. Optionally pre-create `config.json` in the root wit
   "el_key": "your-elevenlabs-key",
   "ai_provider": "openai",
   "ai_model": "gpt-4o-mini",
+  "webhook_url": "",
   "tags": ["Note", "Work", "Meeting", "Buy", "Private"]
 }
 ```
 
 The `tags` array seeds the on-device tag list on first boot. Once tags are saved to the SD card (`/notes/tags.txt`), that file takes precedence.
+
+`webhook_url` is optional — leave it empty to disable. When set, the device POSTs each transcribed note and finished meeting to that endpoint. See [Pushing notes elsewhere](#pushing-notes-elsewhere).
 
 > **No `secrets.h` required.** All credentials live in `config.json` on the SD card and are managed at runtime — no recompile needed.
 
@@ -185,7 +191,7 @@ On first boot (or whenever `config.json` has no WiFi credentials), the device st
 3. **Tap REC** to stop. A final AI summary pass runs automatically.
 
 **From the dashboard:**
-1. Open `http://notemeet.local` and go to the Dashboard tab.
+1. Open the dashboard (the address on the device's idle screen) and go to the Dashboard tab.
 2. Click **Start** — the device begins recording immediately (no button press needed).
 3. Click **Stop** — the device finishes the current chunk and generates the final summary.
 
@@ -193,9 +199,32 @@ Open the **Transcript** and **Summary** tabs to follow along live. If the summar
 
 ### Web dashboard
 
-Browse to `http://notemeet.local` (same WiFi as the device) or `http://192.168.4.1` (connect to the `notemeet` AP first).
+Browse to the address shown on the device's idle screen. On the same WiFi that's the station IP (or `http://notemeet.local` where mDNS resolves); on the device's own hotspot it's `http://192.168.4.1`, which the captive portal opens for you.
 
 Settings saved via the dashboard are written to `config.json` on the SD card immediately and take effect without a reboot.
+
+---
+
+## Pushing notes elsewhere
+
+Set a **Webhook URL** in Settings and the device POSTs JSON every time a voice note is transcribed (during Sync) or a meeting summary is finalised — enough to file notes into Obsidian, a task manager, or anything else that accepts an HTTP POST.
+
+```json
+{
+  "type": "note",
+  "tag": "Work",
+  "text": "Pick up milk",
+  "timestamp": "2026-07-25T14:30:00Z"
+}
+```
+
+`type` is `note`, `meeting`, or `test`. Meetings send `title`, `summary`, and the **full** `transcript` instead of `tag`/`text` — so a long meeting is a large payload. The device retries three times with backoff and treats only a 2xx as success.
+
+**Send test payload** in Settings fires a synthetic `test` payload through the whole chain and reports the status the device actually received, so you can verify a receiver without recording anything.
+
+> **Make the 2xx mean something.** Configure your receiver to respond *after* it has done the work, not on receipt. n8n's default webhook mode returns `200 {"message":"Workflow was started"}` before running a single node, which makes the device's success check meaningless and hides every downstream failure.
+
+[`automation/`](automation/) contains a ready-made n8n workflow that files notes and meetings into an Obsidian vault as Markdown, plus [`n8n_flow.md`](automation/n8n_flow.md) covering setup and the failure modes worth knowing about — including that a file written on the n8n host still has to reach the machine running Obsidian, which is its own supervised dependency.
 
 ---
 
@@ -263,6 +292,7 @@ src/
   process/             — Chunked STT + rolling/final summary pipeline
   time/                — NTP sync helpers
   web/                 — HTTP handlers (web_handlers.cpp) + dashboard SPA (html_pages.h)
+automation/            — Optional webhook receiver: n8n workflow + setup notes
 ```
 
 ---
