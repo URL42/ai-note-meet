@@ -54,6 +54,42 @@ node had `fallbackOutput: "none"`, so a payload that didn't match `note` or
 `meeting` exactly — including the version-dependent `$json.body.type` vs
 `$json.type` difference — vanished without a trace.
 
+## The delivery chain
+
+```
+device  →  n8n (bossbitch)  →  /home/anthony/obsidian/notemeet
+                                        ↓  Syncthing
+                             ~/Documents/obsidian/notemeet  (Mac, Obsidian)
+```
+
+n8n only ever writes to local disk on its own host. Getting the file to the
+machine running Obsidian is Syncthing's job, and **both** Syncthing instances
+have to be running for a note to arrive. Each end needs supervision, and
+neither reports anything when it isn't running — the device and n8n both
+report success regardless, because from their side nothing failed.
+
+**bossbitch** runs the per-user unit `syncthing.service`
+(`/usr/lib/systemd/user/syncthing.service`), which requires lingering, or it
+only runs while someone is logged in over SSH:
+
+```bash
+loginctl show-user anthony --property=Linger   # must be yes
+sudo loginctl enable-linger anthony
+```
+
+Do **not** enable the system-wide `syncthing@anthony` unit as well — two
+instances fight over the same database and the second dies with
+`Error opening database: resource temporarily unavailable`.
+
+**Mac** runs `~/Library/LaunchAgents/com.syncthing.syncthing.plist`
+(`RunAtLoad` + `KeepAlive`, headless). Don't also run the menu-bar
+Syncthing.app; same database-lock conflict. Web UI stays at
+`http://127.0.0.1:8384`.
+
+This combination is what caused a month of silent failure: bossbitch's
+Syncthing ran only during SSH sessions, the Mac's only while the app was
+open, and notes could only arrive when both were true at once.
+
 ## If the device reports success but no note appears
 
 The file was written to the filesystem **n8n is running on**. If your vault
