@@ -43,9 +43,12 @@ overwrites the previous file rather than creating a duplicate.
 ## Setup
 
 1. Import `notemeet_n8n_workflow.json` into n8n.
-2. Edit the `VAULT` constant at the top of the **Build note** node to your
-   vault path. It writes to `<VAULT>/notes/`, `<VAULT>/meetings/`, and
-   `<VAULT>/test/` — create those directories, or the write node fails.
+2. Check the `VAULT` constant at the top of the **Build note** node. It must
+   be the path as seen *inside the container* — `/obsidian/notemeet`. It
+   writes to `<VAULT>/notes/`, `<VAULT>/meetings/` and `<VAULT>/test/`;
+   those directories must already exist, since the write node does not
+   create them. On the host that means:
+   `mkdir -p /home/anthony/obsidian/notemeet/{notes,meetings,test}`
 3. Activate the workflow.
 4. In the device dashboard → Settings, set the Webhook URL to the
    **production** URL (`https://<host>/webhook/notemeet`), save, then click
@@ -65,9 +68,11 @@ was started"}` before running anything, so the device could never distinguish
 "note filed" from "workflow exploded on the first node".
 
 **The write uses the native Read/Write File node**, not `require('fs')` in a
-Code node. n8n blocks built-in modules unless `NODE_FUNCTION_ALLOW_BUILTIN=fs`
-is set in its environment; without it the node throws *after* the webhook has
-already returned success.
+Code node. The original called `mkdirSync(dir, {recursive: true})` before
+writing, which means a wrong path was *silently created* inside the container
+and written into a layer that disappears on restart — a misconfiguration that
+looks exactly like success. The native node fails loudly with `ENOENT`
+instead. It also removes any dependency on `NODE_FUNCTION_ALLOW_BUILTIN`.
 
 **An unrecognised `type` throws** instead of being dropped. The original Switch
 node had `fallbackOutput: "none"`, so a payload that didn't match `note` or
@@ -77,10 +82,17 @@ node had `fallbackOutput: "none"`, so a payload that didn't match `note` or
 ## The delivery chain
 
 ```
-device  →  n8n (bossbitch)  →  /home/anthony/obsidian/notemeet
-                                        ↓  Syncthing
-                             ~/Documents/obsidian/notemeet  (Mac, Obsidian)
+device  →  n8n container (bossbitch)  →  /obsidian/notemeet          [in container]
+                                      =  /home/anthony/obsidian/notemeet  [on host]
+                                                  ↓  Syncthing
+                                   ~/Documents/obsidian/notemeet  (Mac, Obsidian)
 ```
+
+**n8n runs in Docker on bossbitch**, with the host's `/home/anthony/obsidian`
+bind-mounted to `/obsidian` in the container. Workflow paths must use the
+**container** path (`/obsidian/notemeet/...`); a host path writes into the
+container's own filesystem, where files are invisible from outside and are
+lost when the container is recreated.
 
 n8n only ever writes to local disk on its own host. Getting the file to the
 machine running Obsidian is Syncthing's job, and **both** Syncthing instances
