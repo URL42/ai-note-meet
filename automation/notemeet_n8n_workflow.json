@@ -12,94 +12,26 @@
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [
-        220,
-        300
-      ],
+      "position": [400, 300],
       "webhookId": "notemeet",
       "notes": "responseMode=lastNode: the HTTP 200 is sent only after the file is written, so the device's success check means something."
     },
     {
       "parameters": {
-        "jsCode": "// Builds the filename and Markdown body for notes, meetings and test\n// payloads. Pure string work — no fs, no child_process, so this runs without\n// NODE_FUNCTION_ALLOW_BUILTIN. The Write node below does the disk write.\n\n// Path INSIDE the n8n container. The host's /home/anthony/obsidian\n// is bind-mounted to /obsidian, so this is where the vault appears here.\nconst VAULT = '/obsidian/notemeet';\n\nconst b = $input.item.json.body || $input.item.json;\nconst type = (b.type || '').trim();\n\n// Throw rather than drop: an unknown type fails the execution visibly and\n// returns a non-2xx to the device, instead of vanishing silently.\nif (!['note', 'meeting', 'test'].includes(type)) {\n  throw new Error(`Unrecognised payload type: ${JSON.stringify(b.type)}`);\n}\n\nconst ts = b.timestamp || '';\nconst stamp = /^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}/.test(ts)\n  ? ts.substring(0, 16)\n  : new Date().toISOString().substring(0, 16);\nconst label = stamp.replace('T', ' ');\nconst safeLabel = label.replace(/:/g, '-');\n\n// subdir   — which vault folder the file lands in\n// suffix   — trailing part of the filename (kept capitalised for meetings so\n//            new files sort alongside ones written by the original flow)\n// tag      — the #tag written into the body\nlet subdir, suffix, tag, title, body;\n\nif (type === 'meeting') {\n  subdir = 'meetings';\n  suffix = 'Meeting';\n  tag = 'meeting';\n  title = (b.title || '').trim() || `Meeting · ${label}`;\n\n  const summary = (b.summary || '').trim();\n  const transcript = (b.transcript || '').trim();\n\n  // The AI summary already uses its own '##' headings, so it goes in at top\n  // level and the transcript becomes one more sibling section. Obsidian can\n  // fold it from the gutter when you only want the summary.\n  body = summary;\n  if (transcript) {\n    body += `\\n\\n---\\n\\n## Transcript\\n\\n${transcript}`;\n  }\n} else {\n  subdir = type === 'test' ? 'test' : 'notes';\n  tag = (b.tag || 'Note').trim() || 'Note';\n  suffix = tag;\n  title = `${tag} · ${label}`;\n  body = (b.text || '').trim();\n}\n\n// Strip characters that are illegal in filenames on macOS/Linux/Windows.\nconst safeSuffix = suffix.replace(/[\\\\/:*?\"<>|]/g, '-');\nconst safeTag = tag.replace(/[\\\\/:*?\"<>|\\s]/g, '-');\nconst filename = `${VAULT}/${subdir}/${safeLabel} ${safeSuffix}.md`;\n\nconst frontmatter = [\n  '---',\n  'source: notemeet',\n  `type: ${type}`,\n  `created: ${ts || new Date().toISOString()}`,\n  '---',\n  ''\n].join('\\n');\n\nconst content = `${frontmatter}\\n# ${title}\\n\\n#${safeTag}\\n\\n${body}\\n`;\n\nreturn [{\n  json: { filename, title, type, bytes: content.length },\n  binary: {\n    data: {\n      data: Buffer.from(content, 'utf8').toString('base64'),\n      mimeType: 'text/markdown',\n      fileName: filename.split('/').pop()\n    }\n  }\n}];"
+        "jsCode": "// Builds and writes the Markdown file for notes, meetings and test payloads.\n//\n// Writes with fs, like the original flow — n8n's readWriteFile node applies\n// its own access checks and refused to write into the mounted vault. What\n// the original got wrong was mkdirSync(dir, {recursive:true}): a wrong path\n// was silently CREATED inside the container and written to a layer that\n// vanishes on restart, which looks exactly like success. We check the\n// directory instead, so a bad path fails loudly and the webhook returns a\n// non-2xx to the device.\n\nconst { writeFileSync, existsSync, statSync } = require('fs');\n\n// Path INSIDE the n8n container. The host's /home/anthony/obsidian is\n// bind-mounted to /obsidian, so this is where the vault appears here.\n// A host path would write into the container's own filesystem instead.\nconst VAULT = '/obsidian/notemeet';\n\nconst raw = $input.item.json;\nconst b = (raw.body && typeof raw.body === 'object') ? raw.body : raw;\nconst type = (b.type || '').trim();\n\n// Throw rather than drop: an unknown type fails the execution visibly\n// instead of vanishing the way the old Switch's fallback did.\nif (!['note', 'meeting', 'test'].includes(type)) {\n  throw new Error(`Unrecognised payload type: ${JSON.stringify(b.type)}`);\n}\n\nconst ts = b.timestamp || '';\nconst stamp = /^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}/.test(ts)\n  ? ts.substring(0, 16)\n  : new Date().toISOString().substring(0, 16);\nconst label = stamp.replace('T', ' ');\nconst safeLabel = label.replace(/:/g, '-');\n\n// subdir — vault folder the file lands in\n// suffix — trailing part of the filename ('Meeting' stays capitalised so new\n//          files sort alongside ones written by the original flow)\n// tag    — the #tag written into the body\nlet subdir, suffix, tag, title, body;\n\nif (type === 'meeting') {\n  subdir = 'meetings';\n  suffix = 'Meeting';\n  tag = 'meeting';\n  title = (b.title || '').trim() || `Meeting · ${label}`;\n\n  const summary = (b.summary || '').trim();\n  const transcript = (b.transcript || '').trim();\n\n  // The AI summary arrives with its own '##' headings, so it sits at top\n  // level and the transcript is one more sibling section — foldable from\n  // the gutter in Obsidian when you only want the summary.\n  body = summary;\n  if (transcript) {\n    body += `\\n\\n---\\n\\n## Transcript\\n\\n${transcript}`;\n  }\n} else {\n  subdir = type === 'test' ? 'test' : 'notes';\n  tag = (b.tag || 'Note').trim() || 'Note';\n  suffix = tag;\n  title = `${tag} · ${label}`;\n  body = (b.text || '').trim();\n}\n\n// Strip characters that are illegal in filenames on macOS/Linux/Windows.\nconst safeSuffix = suffix.replace(/[\\\\/:*?\"<>|]/g, '-');\nconst safeTag = tag.replace(/[\\\\/:*?\"<>|\\s]/g, '-');\n\nconst dir = `${VAULT}/${subdir}`;\nconst filename = `${dir}/${safeLabel} ${safeSuffix}.md`;\n\n// Deliberately NOT mkdirSync. If this path is wrong — host path instead of\n// container path, or a missing bind mount — we want to hear about it.\nif (!existsSync(dir) || !statSync(dir).isDirectory()) {\n  throw new Error(\n    `Vault directory missing inside the container: ${dir}. ` +\n    `Check the bind mount, and that VAULT is the container path not the host path.`\n  );\n}\n\nconst frontmatter = [\n  '---',\n  'source: notemeet',\n  `type: ${type}`,\n  `created: ${ts || new Date().toISOString()}`,\n  '---',\n  ''\n].join('\\n');\n\nconst content = `${frontmatter}\\n# ${title}\\n\\n#${safeTag}\\n\\n${body}\\n`;\n\nwriteFileSync(filename, content, 'utf8');\n\n// Runs last, so responseMode=lastNode returns this as the HTTP body — the\n// device's 2xx check therefore means the file is genuinely on disk.\nreturn [{ json: { ok: true, written: filename, type, bytes: content.length } }];"
       },
       "id": "ba7b74c0-5211-47de-83fd-f58912cf7208",
-      "name": "Build note",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        460,
-        300
-      ],
-      "notes": "Handles all three payload types in one node. VAULT is the in-container path (/obsidian), not the host path."
-    },
-    {
-      "parameters": {
-        "operation": "write",
-        "fileName": "={{ $json.filename }}",
-        "dataPropertyName": "data",
-        "options": {
-          "append": false
-        }
-      },
-      "id": "d1f0a5c2-79b4-4e21-9a3e-6c2f1b8e4d70",
       "name": "Write to vault",
-      "type": "n8n-nodes-base.readWriteFile",
-      "typeVersion": 1,
-      "position": [
-        700,
-        300
-      ],
-      "notes": "Native file node — surfaces a real ENOENT if the path is wrong, where fs+mkdirSync would silently create the directory inside the container and write into a layer that vanishes on restart. Does NOT create missing directories: notes/, meetings/ and test/ must exist under /obsidian/notemeet in the container."
-    },
-    {
-      "parameters": {
-        "jsCode": "// Runs last, so responseMode=lastNode returns this as the HTTP body.\n// Reaching this node at all means the write above succeeded.\nconst src = $('Build note').item.json;\nreturn [{ json: { ok: true, written: src.filename, bytes: src.bytes } }];"
-      },
-      "id": "f4c9e7a1-3d52-4b88-9f16-2a7d5c0e9b34",
-      "name": "Respond ok",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        940,
-        300
-      ]
+      "position": [640, 300],
+      "notes": "Handles all three payload types in one node — the branches differ only in folder, title and body. VAULT is the in-container path (/obsidian), not the host path."
     }
   ],
   "pinData": {},
   "connections": {
     "Webhook": {
-      "main": [
-        [
-          {
-            "node": "Build note",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Build note": {
-      "main": [
-        [
-          {
-            "node": "Write to vault",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Write to vault": {
-      "main": [
-        [
-          {
-            "node": "Respond ok",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Write to vault", "type": "main", "index": 0 }]]
     }
   },
   "active": false,

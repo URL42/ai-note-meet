@@ -43,10 +43,10 @@ overwrites the previous file rather than creating a duplicate.
 ## Setup
 
 1. Import `notemeet_n8n_workflow.json` into n8n.
-2. Check the `VAULT` constant at the top of the **Build note** node. It must
-   be the path as seen *inside the container* — `/obsidian/notemeet`. It
-   writes to `<VAULT>/notes/`, `<VAULT>/meetings/` and `<VAULT>/test/`;
-   those directories must already exist, since the write node does not
+2. Check the `VAULT` constant at the top of the **Write to vault** node. It
+   must be the path as seen *inside the container* — `/obsidian/notemeet`. It
+   writes to `<VAULT>/notes/`, `<VAULT>/meetings/` and `<VAULT>/test/`; those
+   directories must already exist, since the flow deliberately does not
    create them. On the host that means:
    `mkdir -p /home/anthony/obsidian/notemeet/{notes,meetings,test}`
 3. Activate the workflow.
@@ -67,12 +67,17 @@ closed, and re-introducing any of them brings the silence back:
 was started"}` before running anything, so the device could never distinguish
 "note filed" from "workflow exploded on the first node".
 
-**The write uses the native Read/Write File node**, not `require('fs')` in a
-Code node. The original called `mkdirSync(dir, {recursive: true})` before
-writing, which means a wrong path was *silently created* inside the container
-and written into a layer that disappears on restart — a misconfiguration that
-looks exactly like success. The native node fails loudly with `ENOENT`
-instead. It also removes any dependency on `NODE_FUNCTION_ALLOW_BUILTIN`.
+**The write checks the target directory instead of creating it.** The original
+called `mkdirSync(dir, {recursive: true})`, so a wrong path was *silently
+created* inside the container and written into a layer that disappears on
+restart — a misconfiguration indistinguishable from success. The flow now
+throws if the directory isn't there, which fails the execution and returns a
+non-2xx to the device.
+
+The write still uses `fs` in a Code node rather than n8n's Read/Write File
+node: that node applies its own access checks and refuses to write into the
+mounted vault ("The file … is not writable"), even though `fs` writes to the
+same path without complaint.
 
 **An unrecognised `type` throws** instead of being dropped. The original Switch
 node had `fallbackOutput: "none"`, so a payload that didn't match `note` or
