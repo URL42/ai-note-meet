@@ -17,7 +17,6 @@ extern "C" {
 
 #include "src/power/board_power_bsp.h"
 #include "src/display/epaper_driver_bsp.h"
-#include "logo_bitmap.h"
 #include "sounds.h"
 
 #include <Adafruit_GFX.h>
@@ -52,7 +51,8 @@ extern "C" {
 
 // ─── Content arrays ───────────────────────────────────────────────────────
 const char* DEFAULT_TAGS[]    = { "Note", "Work", "Idea", "Buy", "Private" };
-const char* MENU_ITEMS[]     = { "Record", "Notes", "Tags", "Meet", "Sync", "Settings" };
+// Order here must match the index dispatch in the STATE_MENU handler below.
+const char* MENU_ITEMS[]     = { "Meet", "Record", "Notes", "Tags", "Sync", "Settings" };
 const char* SETTINGS_ITEMS[] = { "Sounds", "Device" };
 
 // ─── Global variable definitions ─────────────────────────────────────────
@@ -470,19 +470,20 @@ void loop() {
       showMenu(menuCursor);
     } else if (rec == EV_SINGLE) {
       soundSelect();
+      // Indices follow MENU_ITEMS: Meet, Record, Notes, Tags, Sync, Settings
       if (menuCursor == 0) {
-        startRecordFlow();
+        state = STATE_MEETING_IDLE;
+        showMeetingIdle();
       } else if (menuCursor == 1) {
+        startRecordFlow();
+      } else if (menuCursor == 2) {
         activeFilter = -1; listCursor = 0;
         state = STATE_NOTE_LIST;
         showNoteList(listCursor);
-      } else if (menuCursor == 2) {
+      } else if (menuCursor == 3) {
         tagCursor = 0;
         state = STATE_TAG_BROWSER;
         showTagBrowser(tagCursor);
-      } else if (menuCursor == 3) {
-        state = STATE_MEETING_IDLE;
-        showMeetingIdle();
       } else if (menuCursor == 4) {
         startSyncFlow();
       } else {

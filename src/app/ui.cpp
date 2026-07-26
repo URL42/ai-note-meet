@@ -7,7 +7,6 @@
 #include "notes.h"
 #include "battery.h"
 #include "rtc.h"
-#include "../../logo_bitmap.h"
 #include "../../sounds.h"
 #include "SD_MMC.h"
 #include <WiFi.h>
@@ -502,15 +501,20 @@ void showError(const char* msg) {
   refresh();
 }
 
+// Deep-sleep cover.  E-paper holds this image with no power, so it's what's
+// on screen most of the device's life — hence the inverted treatment rather
+// than another variation of the wake screen.
+//
+// Stacked at scale 3: there's no battery ring here competing for width, so
+// the large font fits (a single-line "NoteMeet" at scale 3 would be ~162px).
 void showUltraSleepScreen() {
-  clearWhite();
-  #ifdef LOGO_WIDTH
-    drawBitmap1BPP((W - LOGO_WIDTH) / 2, (H - LOGO_HEIGHT) / 2,
-                   logo_bitmap, LOGO_WIDTH, LOGO_HEIGHT, BLACK);
-  #else
-    drawProductWordmark(100, 70, BLACK);
-  #endif
-  refresh();
+  fillRect(0, 0, W, H, BLACK);
+  drawStrC(100,  57, "Note", 3, WHITE);
+  drawStrC(100,  93, "Meet", 3, WHITE);
+  fillCircle(100, 141, 3, WHITE);
+  // Full refresh, not partial: driving every pixel to black through the
+  // partial LUT ghosts heavily, and this frame persists until the next wake.
+  fullRefresh();
 }
 
 void showPlaybackOverlay() {
